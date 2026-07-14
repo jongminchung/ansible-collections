@@ -1,0 +1,12 @@
+{
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+  "go.formatTool": "gofmt",
+  "oxc.enable.oxfmt": true,
+  "oxc.enable.oxlint": false,
+  "oxc.fmt.configPath": ".oxfmtrc.json"
+}
