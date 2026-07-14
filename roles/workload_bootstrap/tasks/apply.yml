@@ -1,6 +1,13 @@
 ---
-- name: Stage workload bootstrap artifacts
-  ansible.builtin.import_tasks: stage.yml
+- name: Resolve workload bootstrap definitions
+  ansible.builtin.set_fact:
+    dev_infra_deployment_workload_bootstrap_definitions: >-
+      {{
+        (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/bootstrap-bin-configmap.yaml')
+         | from_yaml_all | reject('equalto', none) | list)
+        + (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/rbac.yaml')
+           | from_yaml_all | reject('equalto', none) | list)
+      }}
 
 - name: Ensure application namespace exists
   ansible.builtin.include_role:
@@ -14,5 +21,6 @@
     name: dev_infra.deployment.k8s_deployment
     tasks_from: apply_manifest
   vars:
-    dev_infra_deployment_apply_path: "{{ dev_infra_deployment_workload_bootstrap_artifacts_root }}/manifests"
+    dev_infra_deployment_apply_definitions:
+      "{{ dev_infra_deployment_workload_bootstrap_definitions }}"
     dev_infra_deployment_apply_server_side: false

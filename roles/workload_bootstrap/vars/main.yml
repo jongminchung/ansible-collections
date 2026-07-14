@@ -1,4 +1,2 @@
 ---
-dev_infra_deployment_workload_bootstrap_artifacts_root:
-  "{{ dev_infra_deployment_artifacts_root }}/workload_bootstrap"
 dev_infra_deployment_workload_bootstrap_field_manager: dev-infra-deployment-workload-bootstrap

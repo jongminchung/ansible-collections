@@ -18,6 +18,3 @@ argument_specs:
   verify:
     short_description: Verify OpenSearch workload readiness.
     options: {}
-  stage:
-    short_description: Stage OpenSearch-owned static artifacts on the target host.
-    options: {}

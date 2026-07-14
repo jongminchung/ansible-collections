@@ -14,8 +14,11 @@
     tasks_from: run_job
   vars:
     dev_infra_deployment_job_name: tls-workload-trust-patch
-    dev_infra_deployment_job_manifest:
-      "{{ dev_infra_deployment_workload_bootstrap_artifacts_root }}/jobs/tls-workload-trust-patch-job.yaml"
+    dev_infra_deployment_job_definition: >-
+      {{
+        lookup('ansible.builtin.file', role_path ~
+        '/files/k8s/jobs/tls-workload-trust-patch-job.yaml') | from_yaml
+      }}
     dev_infra_deployment_job_namespace: "{{ dev_infra_deployment_namespace }}"
     dev_infra_deployment_job_timeout_seconds: "{{ dev_infra_deployment_wait_timeout_seconds }}"
 
@@ -47,8 +50,10 @@
     tasks_from: run_job
   vars:
     dev_infra_deployment_job_name: tls-root-ca-converge-renew
-    dev_infra_deployment_job_manifest:
-      "{{ dev_infra_deployment_workload_bootstrap_artifacts_root
-      }}/jobs/tls-root-ca-converge-renew-job.yaml"
+    dev_infra_deployment_job_definition: >-
+      {{
+        lookup('ansible.builtin.file', role_path ~
+        '/files/k8s/jobs/tls-root-ca-converge-renew-job.yaml') | from_yaml
+      }}
     dev_infra_deployment_job_namespace: "{{ dev_infra_deployment_namespace }}"
     dev_infra_deployment_job_timeout_seconds: 2400

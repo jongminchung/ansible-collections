@@ -27,7 +27,6 @@
       - external_tls_certificate_dns_names is not string
       - external_tls_certificate_dns_names | length > 0
       - external_tls_certificate_wait_timeout | length > 0
-      - external_tls_certificate_manifest_path | length > 0
     fail_msg: "{{ external_tls_certificate_label }} settings are invalid."
   no_log: true
   when: external_tls_certificate_role_requested_resolved | bool
@@ -69,20 +68,12 @@
     - not ansible_check_mode
 
 - name: Ensure {{ external_tls_certificate_label }} namespace exists
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - create
-      - namespace
-      - "{{ external_tls_certificate_namespace }}"
-  register: external_tls_certificate_namespace_create
-  changed_when: external_tls_certificate_namespace_create.rc == 0
-  failed_when:
-    - external_tls_certificate_namespace_create.rc != 0
-    - "'AlreadyExists' not in external_tls_certificate_namespace_create.stderr"
-  when:
-    - external_tls_certificate_role_requested_resolved | bool
-    - not ansible_check_mode
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: ensure_namespace
+  vars:
+    dev_infra_deployment_target_namespace: "{{ external_tls_certificate_namespace }}"
+  when: external_tls_certificate_role_requested_resolved | bool
 
 - name: Lookup {{ external_tls_certificate_label }} Cloudflare DNS records
   ansible.builtin.uri:
@@ -182,39 +173,31 @@
         or (item.json.result[0].ttl | int) != (external_tls_certificate_dns_ttl | int)
       )
 
-- name: Render {{ external_tls_certificate_label }} Certificate manifest
-  ansible.builtin.template:
-    src: certificate.yaml.j2
-    dest: "{{ external_tls_certificate_manifest_path }}"
-    owner: root
-    group: root
-    mode: "0644"
+- name: Resolve {{ external_tls_certificate_label }} Certificate definition
+  ansible.builtin.set_fact:
+    external_tls_certificate_definition: >-
+      {{ lookup('ansible.builtin.template', role_path ~ '/templates/certificate.yaml.j2') | from_yaml }}
   when: external_tls_certificate_role_requested_resolved | bool
 
 - name: Apply {{ external_tls_certificate_label }} Certificate
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - apply
-      - -f
-      - "{{ external_tls_certificate_manifest_path }}"
-  register: external_tls_certificate_apply
-  changed_when: "'unchanged' not in external_tls_certificate_apply.stdout"
-  when:
-    - external_tls_certificate_role_requested_resolved | bool
-    - not ansible_check_mode
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_definitions: "{{ external_tls_certificate_definition }}"
+    dev_infra_deployment_apply_server_side: false
+  when: external_tls_certificate_role_requested_resolved | bool
 
 - name: Wait for {{ external_tls_certificate_label }} Certificate readiness
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - wait
-      - --for=condition=Ready
-      - certificate/{{ external_tls_certificate_name }}
-      - --namespace
-      - "{{ external_tls_certificate_namespace }}"
-      - --timeout={{ external_tls_certificate_wait_timeout }}
-  changed_when: false
-  when:
-    - external_tls_certificate_role_requested_resolved | bool
-    - not ansible_check_mode
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_condition
+  vars:
+    dev_infra_deployment_wait_api_version: cert-manager.io/v1
+    dev_infra_deployment_wait_kind: Certificate
+    dev_infra_deployment_wait_namespace: "{{ external_tls_certificate_namespace }}"
+    dev_infra_deployment_wait_name: "{{ external_tls_certificate_name }}"
+    dev_infra_deployment_wait_condition_type: Ready
+    dev_infra_deployment_wait_timeout_seconds:
+      "{{ external_tls_certificate_wait_timeout | regex_replace('s$', '') | int }}"
+  when: external_tls_certificate_role_requested_resolved | bool

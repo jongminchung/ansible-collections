@@ -1,0 +1,15 @@
+---
+- name: Read Kubernetes resource from the Ansible control node
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: "{{ dev_infra_deployment_resource_api_version }}"
+    kind: "{{ dev_infra_deployment_resource_kind }}"
+    namespace: "{{ dev_infra_deployment_resource_namespace | default(omit) }}"
+    name: "{{ dev_infra_deployment_resource_name }}"
+  register: dev_infra_deployment_resource_info_result
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

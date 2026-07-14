@@ -3,13 +3,6 @@ local_path_provisioner_version: v0.0.36
 local_path_provisioner_manifest_url:
   "https://raw.githubusercontent.com/rancher/local-path-provisioner/{{
   local_path_provisioner_version }}/deploy/local-path-storage.yaml"
-local_path_provisioner_manifest_dir: /opt/dev-infra-platform/local-path-provisioner
-local_path_provisioner_manifest_path:
-  "{{ local_path_provisioner_manifest_dir }}/local-path-storage.yaml"
-local_path_provisioner_kubectl_bin:
-  "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-local_path_provisioner_kubeconfig:
-  "{{ k8s_kubeconfig | default('/etc/rancher/rke2/rke2.yaml') }}"
 local_path_provisioner_namespace: local-path-storage
 local_path_provisioner_deployment_name: local-path-provisioner
 local_path_provisioner_storage_class: local-path

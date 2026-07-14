@@ -22,7 +22,7 @@
   block:
     - name: Read Dashboard pods
       kubernetes.core.k8s_info:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         api_version: v1
         kind: Pod
         namespace: "{{ dev_infra_deployment_namespace }}"
@@ -39,7 +39,7 @@
 
     - name: Run Dashboard HTTP smoke check through pod exec
       kubernetes.core.k8s_exec:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         namespace: "{{ dev_infra_deployment_namespace }}"
         pod: "{{ dev_infra_deployment_dashboard_pod_name }}"
         command: "curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5601/api/status"

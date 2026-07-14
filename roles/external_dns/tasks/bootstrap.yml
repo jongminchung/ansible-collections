@@ -1,11 +1,13 @@
 ---
 - name: Resolve ExternalDNS role request state
   ansible.builtin.set_fact:
-    external_dns_role_requested:
-      "{{ ((ansible_run_tags | default(['all'])) | intersect(['all', 'external_dns', 'dns',
-      'gateway_api']) | length) > 0 }}"
-  tags:
-    - always
+    external_dns_role_requested: >-
+      {{
+        ((ansible_run_tags | default(['all']))
+        | intersect(['all', 'external_dns', 'dns', 'gateway_api'])
+        | length) > 0
+      }}
+  tags: [always]
 
 - name: Validate ExternalDNS settings
   ansible.builtin.assert:
@@ -19,49 +21,15 @@
       - external_dns_domain_filters is iterable
       - external_dns_domain_filters is not string
       - external_dns_domain_filters | length > 0
-      - external_dns_txt_owner_id | length > 0
       - external_dns_sources is iterable
       - external_dns_sources is not string
       - external_dns_sources | length > 0
-      - external_dns_gateway_name | length > 0
-      - external_dns_gateway_namespace | length > 0
-      - external_dns_target | length > 0
       - external_dns_cloudflare_api_token | length > 0
       - external_dns_cloudflare_zone_id | length > 0
-      - external_dns_extra_args is mapping
-      - external_dns_helm_values is mapping
     fail_msg: ExternalDNS role settings are invalid.
   no_log: true
   when: external_dns_role_requested | bool
-  tags:
-    - always
-    - validate
-
-- name: Resolve ExternalDNS Helm extra args
-  ansible.builtin.set_fact:
-    external_dns_extra_args_resolved: >-
-      {{
-        {
-          'gateway-name': external_dns_gateway_name,
-          'gateway-namespace': external_dns_gateway_namespace,
-          'zone-id-filter': external_dns_cloudflare_zone_id,
-          'cloudflare-dns-records-per-page': external_dns_cloudflare_dns_records_per_page,
-          'cloudflare-proxied': external_dns_cloudflare_proxied | bool
-        }
-        | combine(external_dns_extra_args)
-        | combine(
-          (
-            {'cloudflare-record-comment': external_dns_cloudflare_record_comment}
-            if (external_dns_cloudflare_record_comment | string | length > 0)
-            else {}
-          )
-        )
-      }}
-  no_log: true
-  when: external_dns_role_requested | bool
-  tags:
-    - always
-    - vault
+  tags: [always, validate]
 
 - name: Resolve ExternalDNS Helm values
   ansible.builtin.set_fact:
@@ -70,15 +38,24 @@
         external_dns_helm_values
         | combine(
           {
-            'provider': {
-              'name': external_dns_provider_name
-            },
+            'provider': {'name': external_dns_provider_name},
             'sources': external_dns_sources,
             'domainFilters': external_dns_domain_filters,
             'txtOwnerId': external_dns_txt_owner_id,
             'policy': 'upsert-only',
             'registry': 'txt',
-            'extraArgs': external_dns_extra_args_resolved,
+            'extraArgs': {
+              'gateway-name': external_dns_gateway_name,
+              'gateway-namespace': external_dns_gateway_namespace,
+              'zone-id-filter': external_dns_cloudflare_zone_id,
+              'cloudflare-dns-records-per-page': external_dns_cloudflare_dns_records_per_page,
+              'cloudflare-proxied': external_dns_cloudflare_proxied | bool
+            }
+            | combine(external_dns_extra_args)
+            | combine(
+                {'cloudflare-record-comment': external_dns_cloudflare_record_comment}
+                if (external_dns_cloudflare_record_comment | length > 0) else {}
+              ),
             'env': [
               {
                 'name': 'CF_API_TOKEN',
@@ -96,15 +73,12 @@
       }}
   no_log: true
   when: external_dns_role_requested | bool
-  tags:
-    - always
-    - vault
 
 - name: Check ExternalDNS Cloudflare DNS record API access
   ansible.builtin.uri:
-    url:
-      "https://api.cloudflare.com/client/v4/zones/{{ external_dns_cloudflare_zone_id
-      }}/dns_records?per_page=1"
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{
+      external_dns_cloudflare_zone_id }}/dns_records?per_page=1
     validate_certs: "{{ external_dns_cloudflare_api_validate_certs | bool }}"
     method: GET
     headers:
@@ -112,12 +86,16 @@
       Content-Type: application/json
     return_content: true
     status_code: 200
-  become: false
   register: external_dns_cloudflare_dns_records_access
   changed_when: false
   failed_when: false
   no_log: true
-  when: not ansible_check_mode
+  when:
+    - external_dns_role_requested | bool
+    - not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Validate ExternalDNS Cloudflare DNS record API access
   ansible.builtin.assert:
@@ -125,144 +103,68 @@
       - external_dns_cloudflare_dns_records_access.status == 200
       - external_dns_cloudflare_dns_records_access.json.success | default(false) | bool
     fail_msg: >-
-      CLOUDFLARE_API_TOKEN must be a Cloudflare API token that can read DNS records for zone {{
-      external_dns_cloudflare_zone_id }}. ExternalDNS also needs Zone DNS Edit permission
-      for the same zone. Account DNS Settings Edit is not enough for DNS record
-      create/update/delete.
-  when: not ansible_check_mode
-
-- name: Install ExternalDNS prerequisites
-  ansible.builtin.apt:
-    name:
-      - ca-certificates
-      - curl
-    state: present
-    update_cache: true
-
-- name: Check Helm binary for ExternalDNS
-  ansible.builtin.stat:
-    path: /usr/local/bin/helm
-  register: external_dns_helm_binary
-
-- name: Download Helm installer for ExternalDNS
-  ansible.builtin.get_url:
-    url: "{{ external_dns_helm_install_script_url }}"
-    dest: /tmp/get-helm-3.sh
-    owner: root
-    group: root
-    mode: "0755"
-  when: not external_dns_helm_binary.stat.exists
-
-- name: Install Helm for ExternalDNS
-  ansible.builtin.command:
-    argv:
-      - /bin/bash
-      - /tmp/get-helm-3.sh
-  when: not external_dns_helm_binary.stat.exists
+      The Cloudflare API token must read and edit DNS records for zone
+      {{ external_dns_cloudflare_zone_id }}.
+  when:
+    - external_dns_role_requested | bool
+    - not ansible_check_mode
 
 - name: Ensure ExternalDNS namespace exists
-  ansible.builtin.shell: >-
-    set -o pipefail && {{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }} create
-    namespace {{ external_dns_namespace | quote }} --dry-run=client -o yaml | {{ k8s_kubectl_bin |
-    default('/var/lib/rancher/rke2/bin/kubectl') }} apply -f -
-  args:
-    executable: /bin/bash
-  register: external_dns_namespace_apply
-  changed_when:
-    "'created' in external_dns_namespace_apply.stdout or 'configured' in
-    external_dns_namespace_apply.stdout"
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: ensure_namespace
+  vars:
+    dev_infra_deployment_target_namespace: "{{ external_dns_namespace }}"
+  when: external_dns_role_requested | bool
 
-- name: Configure ExternalDNS Cloudflare token secret
-  ansible.builtin.shell: >-
-    set -o pipefail && {{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }} create
-    secret generic {{ external_dns_cloudflare_secret_name | quote }} --namespace {{
-    external_dns_namespace | quote }} --from-literal=api-token={{
-    external_dns_cloudflare_api_token | quote }} --dry-run=client -o yaml | {{
-    k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }} apply -f -
-  args:
-    executable: /bin/bash
-  register: external_dns_cloudflare_secret_apply
-  changed_when:
-    "'created' in external_dns_cloudflare_secret_apply.stdout or 'configured' in
-    external_dns_cloudflare_secret_apply.stdout"
+- name: Apply ExternalDNS Cloudflare token Secret
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_definitions:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ external_dns_cloudflare_secret_name }}"
+        namespace: "{{ external_dns_namespace }}"
+      type: Opaque
+      stringData:
+        api-token: "{{ external_dns_cloudflare_api_token }}"
+    dev_infra_deployment_apply_server_side: false
+    dev_infra_deployment_apply_no_log: true
   no_log: true
-  when: not ansible_check_mode
+  when: external_dns_role_requested | bool
 
-- name: Add ExternalDNS Helm repository
-  ansible.builtin.command:
-    argv:
-      - /usr/local/bin/helm
-      - repo
-      - add
-      - "{{ external_dns_chart_repo_name }}"
-      - "{{ external_dns_chart_repo_url }}"
-      - --force-update
-  register: external_dns_helm_repo_add
-  changed_when:
-    "'has been added' in external_dns_helm_repo_add.stdout or 'has been updated' in
-    external_dns_helm_repo_add.stdout"
-
-- name: Update ExternalDNS Helm repository
-  ansible.builtin.command:
-    argv:
-      - /usr/local/bin/helm
-      - repo
-      - update
-      - "{{ external_dns_chart_repo_name }}"
-  changed_when: false
+- name: Configure ExternalDNS Helm repository
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: helm_repo
+  vars:
+    dev_infra_deployment_helm_repo_name: "{{ external_dns_chart_repo_name }}"
+    dev_infra_deployment_helm_repo_url: "{{ external_dns_chart_repo_url }}"
+  when: external_dns_role_requested | bool
 
 - name: Install or upgrade ExternalDNS
-  block:
-    - name: Create ExternalDNS Helm values temp directory
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: external-dns-helm-
-      register: external_dns_helm_values_temp_dir
-
-    - name: Render ExternalDNS Helm values
-      ansible.builtin.copy:
-        content: "{{ external_dns_helm_values_resolved | to_nice_yaml }}"
-        dest: "{{ external_dns_helm_values_temp_dir.path }}/values.yaml"
-        owner: root
-        group: root
-        mode: "0600"
-
-    - name: Apply ExternalDNS Helm release
-      ansible.builtin.command:
-        argv:
-          - /usr/local/bin/helm
-          - upgrade
-          - --install
-          - "{{ external_dns_release_name }}"
-          - "{{ external_dns_chart_ref }}"
-          - --namespace
-          - "{{ external_dns_namespace }}"
-          - --values
-          - "{{ external_dns_helm_values_temp_dir.path }}/values.yaml"
-      environment:
-        KUBECONFIG: "{{ k8s_kubeconfig | default('/etc/rancher/rke2/rke2.yaml') }}"
-      register: external_dns_helm_upgrade
-      changed_when:
-        "'has been upgraded' in external_dns_helm_upgrade.stdout or 'has been installed' in
-        external_dns_helm_upgrade.stdout"
-  always:
-    - name: Remove ExternalDNS Helm values temp directory
-      ansible.builtin.file:
-        path: "{{ external_dns_helm_values_temp_dir.path }}"
-        state: absent
-      when: external_dns_helm_values_temp_dir.path is defined
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: helm_release
+  vars:
+    dev_infra_deployment_helm_release_name: "{{ external_dns_release_name }}"
+    dev_infra_deployment_helm_chart_ref: "{{ external_dns_chart_ref }}"
+    dev_infra_deployment_helm_namespace: "{{ external_dns_namespace }}"
+    dev_infra_deployment_helm_release_values: "{{ external_dns_helm_values_resolved }}"
+    dev_infra_deployment_helm_wait: true
+    dev_infra_deployment_helm_no_log: true
   no_log: true
-  when: not ansible_check_mode
+  when: external_dns_role_requested | bool
 
 - name: Wait for ExternalDNS rollout
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - rollout
-      - status
-      - deployment/{{ external_dns_release_name }}
-      - --namespace
-      - "{{ external_dns_namespace }}"
-      - --timeout=180s
-  changed_when: false
-  when: not ansible_check_mode
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ external_dns_namespace }}"
+    dev_infra_deployment_rollout_resource: "deployment/{{ external_dns_release_name }}"
+    dev_infra_deployment_rollout_timeout_seconds: 180
+  when: external_dns_role_requested | bool

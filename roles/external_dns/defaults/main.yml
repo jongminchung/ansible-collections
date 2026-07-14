@@ -4,7 +4,6 @@ external_dns_release_name: external-dns
 external_dns_chart_ref: external-dns/external-dns
 external_dns_chart_repo_name: external-dns
 external_dns_chart_repo_url: https://kubernetes-sigs.github.io/external-dns/
-external_dns_helm_install_script_url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
 external_dns_provider_name: cloudflare
 external_dns_cloudflare_api_token: ""
 external_dns_cloudflare_zone_id: ""

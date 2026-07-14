@@ -1,50 +1,55 @@
 ---
-- name: Converge Kubernetes platform foundation
-  ansible.builtin.import_playbook: bootstrap.yml
-
-- name: Configure Kubernetes workloads
+- name: Configure Kubernetes platform and workloads from the Ansible control node
   hosts: k8s_workload_mgr
-  become: true
+  become: false
   gather_facts: false
   pre_tasks:
-    - name: Prepare Kubernetes deployment prerequisites
+    - name: Validate Ansible control node and Kubernetes API access
       ansible.builtin.import_role:
         name: dev_infra.deployment.k8s_deployment
-        tasks_from: prerequisites
+        tasks_from: validate_control_node
       tags: [always]
   tasks:
-    - name: Configure Vault
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.vault
-        tasks_from: configure
-      tags: [vault]
+    - name: Converge Kubernetes platform roles
+      ansible.builtin.import_tasks: tasks/platform.yml
 
-    - name: Configure internal PKI issuer
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.internal_pki_issuer
-        tasks_from: configure
-      tags: [internal_pki_issuer, pki, tls]
+    - name: Converge Kubernetes workloads from the Ansible control node
+      block:
+        - name: Configure Vault
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.vault
+            tasks_from: configure
+          tags: [vault]
 
-    - name: Configure workload bootstrap resources
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.workload_bootstrap
-        tasks_from: configure
-      tags: [workload_bootstrap, pki]
+        - name: Configure internal PKI issuer
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.internal_pki_issuer
+            tasks_from: configure
+          tags: [internal_pki_issuer, pki, tls]
 
-    - name: Configure etcd
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.etcd
-        tasks_from: configure
-      tags: [etcd]
+        - name: Configure workload bootstrap resources
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.workload_bootstrap
+            tasks_from: configure
+          tags: [workload_bootstrap, pki]
 
-    - name: Configure OpenSearch
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.opensearch
-        tasks_from: configure
-      tags: [opensearch]
+        - name: Configure etcd
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.etcd
+            tasks_from: configure
+          tags: [etcd]
 
-    - name: Configure OpenSearch Dashboard
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.opensearch_dashboard
-        tasks_from: configure
-      tags: [opensearch_dashboard, dashboard]
+        - name: Configure OpenSearch
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.opensearch
+            tasks_from: configure
+          tags: [opensearch]
+
+        - name: Configure OpenSearch Dashboard
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.opensearch_dashboard
+            tasks_from: configure
+          tags: [opensearch_dashboard, dashboard]
+      delegate_to: localhost
+      become: false
+      run_once: true

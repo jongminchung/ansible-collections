@@ -9,65 +9,41 @@
       - cert_manager_chart_repo_url | length > 0
       - cert_manager_chart_version | string | length > 0
       - cert_manager_helmchart_failure_policy in ['abort', 'reinstall']
-      - cert_manager_helmchart_manifest_path | length > 0
       - cert_manager_helm_values is mapping
-      - cert_manager_wait_timeout | length > 0
     fail_msg: cert-manager role settings are invalid.
-  tags:
-    - always
-    - validate
+  tags: [always, validate]
 
-- name: Render cert-manager HelmChart manifest
-  ansible.builtin.copy:
-    content: |
-      ---
+- name: Apply cert-manager HelmChart
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_definitions:
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:
-        name: {{ cert_manager_release_name }}
-        namespace: {{ cert_manager_helmchart_namespace }}
+        name: "{{ cert_manager_release_name }}"
+        namespace: "{{ cert_manager_helmchart_namespace }}"
       spec:
-        chart: {{ cert_manager_chart_ref }}
-        repo: {{ cert_manager_chart_repo_url }}
-        version: {{ cert_manager_chart_version }}
-        targetNamespace: {{ cert_manager_namespace }}
+        chart: "{{ cert_manager_chart_ref }}"
+        repo: "{{ cert_manager_chart_repo_url }}"
+        version: "{{ cert_manager_chart_version }}"
+        targetNamespace: "{{ cert_manager_namespace }}"
         createNamespace: true
-        failurePolicy: {{ cert_manager_helmchart_failure_policy }}
-        valuesContent: |-
-      {{ cert_manager_helm_values | to_nice_yaml(indent=2) | indent(4, true) }}
-    dest: "{{ cert_manager_helmchart_manifest_path }}"
-    owner: root
-    group: root
-    mode: "0644"
+        failurePolicy: "{{ cert_manager_helmchart_failure_policy }}"
+        valuesContent: "{{ cert_manager_helm_values | to_nice_yaml }}"
+    dev_infra_deployment_apply_server_side: false
 
-- name: Apply cert-manager HelmChart
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - --kubeconfig
-      - "{{ k8s_kubeconfig | default('/etc/rancher/rke2/rke2.yaml') }}"
-      - apply
-      - -f
-      - "{{ cert_manager_helmchart_manifest_path }}"
-  register: cert_manager_helmchart_apply
-  changed_when: >-
-    ' created' in (' ' ~ cert_manager_helmchart_apply.stdout)
-    or ' configured' in (' ' ~ cert_manager_helmchart_apply.stdout)
-  when: not ansible_check_mode
-
-- name: Wait for cert-manager rollout
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - rollout
-      - status
-      - deployment/{{ item }}
-      - --namespace
-      - "{{ cert_manager_namespace }}"
-      - --timeout={{ cert_manager_wait_timeout }}
+- name: Wait for cert-manager rollouts
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ cert_manager_namespace }}"
+    dev_infra_deployment_rollout_resource: "deployment/{{ item }}"
+    dev_infra_deployment_rollout_timeout_seconds:
+      "{{ cert_manager_wait_timeout | regex_replace('s$', '') | int }}"
   loop:
     - cert-manager
     - cert-manager-cainjector
     - cert-manager-webhook
-  changed_when: false
-  when: not ansible_check_mode

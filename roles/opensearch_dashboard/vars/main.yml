@@ -1,7 +1,2 @@
 ---
-dev_infra_deployment_dashboard_artifacts_root: "{{ dev_infra_deployment_artifacts_root }}/opensearch_dashboard"
 dev_infra_deployment_dashboard_field_manager: opensearch-dashboard-local-resources
-dev_infra_deployment_dashboard_values_files:
-  - "{{ dev_infra_deployment_dashboard_artifacts_root }}/values.yaml"
-  - "{{ dev_infra_deployment_dashboard_artifacts_root }}/values-secret.yaml"
-dev_infra_deployment_dashboard_local_manifests: "{{ dev_infra_deployment_dashboard_artifacts_root }}/manifests"

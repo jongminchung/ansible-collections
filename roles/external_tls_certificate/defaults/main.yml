@@ -11,7 +11,6 @@ external_tls_certificate_secret_name: ""
 external_tls_certificate_issuer_name: ""
 external_tls_certificate_issuer_kind: ClusterIssuer
 external_tls_certificate_wait_timeout: 600s
-external_tls_certificate_manifest_path: /tmp/external-tls-certificate.yaml
 external_tls_certificate_cloudflare_api_token: ""
 external_tls_certificate_cloudflare_zone_id: ""
 external_tls_certificate_cloudflare_api_validate_certs: true

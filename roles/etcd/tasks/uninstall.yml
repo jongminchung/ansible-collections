@@ -1,6 +1,9 @@
 ---
-- name: Stage etcd artifacts
-  ansible.builtin.import_tasks: stage.yml
+- name: Resolve etcd Certificate definitions for deletion
+  ansible.builtin.set_fact:
+    dev_infra_deployment_etcd_delete_certificate_definitions: >-
+      {{ lookup('ansible.builtin.file', role_path ~ '/files/k8s/certificate.yaml')
+         | from_yaml_all | reject('equalto', none) | list }}
 
 - name: Uninstall etcd Helm release
   ansible.builtin.include_role:
@@ -28,11 +31,12 @@
     name: dev_infra.deployment.k8s_deployment
     tasks_from: delete_manifest
   vars:
-    dev_infra_deployment_delete_path: "{{ dev_infra_deployment_etcd_certificate_manifest }}"
+    dev_infra_deployment_delete_definitions:
+      "{{ dev_infra_deployment_etcd_delete_certificate_definitions }}"
 
 - name: Delete stale etcd client TLS resources
   kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: "{{ item.api_version }}"
     kind: "{{ item.kind }}"
     namespace: "{{ dev_infra_deployment_namespace }}"

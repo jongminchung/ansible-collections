@@ -1,0 +1,61 @@
+---
+- name: Validate Ansible control node requirements
+  block:
+    - name: Locate required Ansible control node executables
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/env
+          - sh
+          - -c
+          - "command -v {{ item }}"
+      loop:
+        - ansible-playbook
+        - ansible-galaxy
+        - git
+        - helm
+        - jq
+      register: dev_infra_deployment_control_node_commands
+      changed_when: false
+      check_mode: false
+
+    - name: Validate Ansible control node Python modules
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - import kubernetes, yaml, jsonpatch
+      changed_when: false
+      check_mode: false
+
+    - name: Inspect Ansible control-node kubeconfig
+      ansible.builtin.stat:
+        path: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+      register: dev_infra_deployment_control_node_kubeconfig_stat
+      when: dev_infra_deployment_validate_kubeconfig | bool
+
+    - name: Validate Ansible control-node kubeconfig
+      ansible.builtin.assert:
+        that:
+          - dev_infra_deployment_control_node_kubeconfig_stat.stat.isreg | default(false)
+          - dev_infra_deployment_control_node_kubeconfig_stat.stat.mode == '0600'
+        fail_msg: >-
+          Ansible control-node kubeconfig is missing or insecure at
+          {{ dev_infra_deployment_control_node_kubeconfig_path }}. Run deployment:bootstrap first.
+      when: dev_infra_deployment_validate_kubeconfig | bool
+
+    - name: Validate Kubernetes API access from the Ansible control node
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+        api_version: v1
+        kind: Namespace
+        name: default
+      changed_when: false
+      when:
+        - dev_infra_deployment_validate_kubeconfig | bool
+        - not ansible_check_mode or
+          (dev_infra_deployment_control_node_kubeconfig_stat.stat.isreg | default(false))
+  delegate_to: localhost
+  become: false
+  run_once: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

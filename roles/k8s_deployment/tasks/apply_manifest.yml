@@ -1,47 +1,134 @@
 ---
-- name: Inspect Kubernetes manifest path {{ dev_infra_deployment_apply_path }}
-  ansible.builtin.stat:
-    path: "{{ dev_infra_deployment_apply_path }}"
-  register: dev_infra_deployment_apply_path_stat
+- name: Apply Kubernetes definitions from the Ansible control node
+  block:
+    - name: Validate Kubernetes manifest input
+      ansible.builtin.assert:
+        that:
+          - >-
+            [
+              dev_infra_deployment_apply_definitions is defined,
+              dev_infra_deployment_apply_files is defined,
+              dev_infra_deployment_apply_url is defined,
+              dev_infra_deployment_apply_path is defined
+            ] | select('equalto', true) | list | length == 1
+        fail_msg: >-
+          Set exactly one of dev_infra_deployment_apply_definitions,
+          dev_infra_deployment_apply_files, dev_infra_deployment_apply_url, or
+          dev_infra_deployment_apply_path.
 
-- name: Find Kubernetes manifest files under {{ dev_infra_deployment_apply_path }}
-  ansible.builtin.find:
-    paths: "{{ dev_infra_deployment_apply_path }}"
-    file_type: file
-    patterns:
-      - "*.yaml"
-      - "*.yml"
-  register: dev_infra_deployment_apply_manifest_find
-  when: dev_infra_deployment_apply_path_stat.stat.isdir | default(false)
+    - name: Initialize resolved Kubernetes definitions
+      ansible.builtin.set_fact:
+        dev_infra_deployment_apply_definitions_resolved: []
 
-- name: Resolve Kubernetes manifest files to apply
-  ansible.builtin.set_fact:
-    dev_infra_deployment_apply_manifest_files:
-      "{{ ([dev_infra_deployment_apply_path] if (dev_infra_deployment_apply_path_stat.stat.isreg |
-      default(false)) else (dev_infra_deployment_apply_manifest_find.files | default([]) |
-      map(attribute='path') | sort | list)) }}"
+    - name: Resolve supplied Kubernetes definitions
+      ansible.builtin.set_fact:
+        dev_infra_deployment_apply_definitions_resolved: >-
+          {{
+            dev_infra_deployment_apply_definitions
+            if (dev_infra_deployment_apply_definitions is sequence and
+                dev_infra_deployment_apply_definitions is not mapping and
+                dev_infra_deployment_apply_definitions is not string)
+            else [dev_infra_deployment_apply_definitions]
+          }}
+      when: dev_infra_deployment_apply_definitions is defined
 
-- name: Apply Kubernetes manifest {{ dev_infra_deployment_apply_path }}
-  kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
-    state: present
-    src: "{{ item }}"
-    apply: true
-  loop: "{{ dev_infra_deployment_apply_manifest_files }}"
+    - name: Resolve Kubernetes definition files
+      ansible.builtin.set_fact:
+        dev_infra_deployment_apply_definitions_resolved: >-
+          {{
+            dev_infra_deployment_apply_definitions_resolved
+            + (lookup('ansible.builtin.file', item) | from_yaml_all | reject('equalto', none) | list)
+          }}
+      loop: "{{ dev_infra_deployment_apply_files }}"
+      when: dev_infra_deployment_apply_files is defined
+
+    - name: Read Kubernetes definitions from URL
+      ansible.builtin.uri:
+        url: "{{ dev_infra_deployment_apply_url }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: dev_infra_deployment_apply_url_result
+      changed_when: false
+      check_mode: false
+      when: dev_infra_deployment_apply_url is defined
+
+    - name: Resolve Kubernetes definitions from URL
+      ansible.builtin.set_fact:
+        dev_infra_deployment_apply_definitions_resolved: >-
+          {{
+            dev_infra_deployment_apply_url_result.content
+            | from_yaml_all
+            | reject('equalto', none)
+            | list
+          }}
+      when: dev_infra_deployment_apply_url is defined
+
+    - name: Inspect Kubernetes manifest path
+      ansible.builtin.stat:
+        path: "{{ dev_infra_deployment_apply_path }}"
+      register: dev_infra_deployment_apply_path_stat
+      when: dev_infra_deployment_apply_path is defined
+
+    - name: Find Kubernetes manifest files
+      ansible.builtin.find:
+        paths: "{{ dev_infra_deployment_apply_path }}"
+        file_type: file
+        patterns:
+          - "*.yaml"
+          - "*.yml"
+      register: dev_infra_deployment_apply_manifest_find
+      when:
+        - dev_infra_deployment_apply_path is defined
+        - dev_infra_deployment_apply_path_stat.stat.isdir | default(false)
+
+    - name: Resolve Kubernetes manifest path files
+      ansible.builtin.set_fact:
+        dev_infra_deployment_apply_path_files: >-
+          {{
+            [dev_infra_deployment_apply_path]
+            if (dev_infra_deployment_apply_path_stat.stat.isreg | default(false))
+            else (dev_infra_deployment_apply_manifest_find.files | default([])
+                  | map(attribute='path') | sort | list)
+          }}
+      when: dev_infra_deployment_apply_path is defined
+
+    - name: Resolve Kubernetes definitions from manifest path
+      ansible.builtin.set_fact:
+        dev_infra_deployment_apply_definitions_resolved: >-
+          {{
+            dev_infra_deployment_apply_definitions_resolved
+            + (lookup('ansible.builtin.file', item) | from_yaml_all | reject('equalto', none) | list)
+          }}
+      loop: "{{ dev_infra_deployment_apply_path_files | default([]) }}"
+      when: dev_infra_deployment_apply_path is defined
+
+    - name: Validate resolved Kubernetes definitions
+      ansible.builtin.assert:
+        that:
+          - dev_infra_deployment_apply_definitions_resolved | length > 0
+        fail_msg: No Kubernetes definitions were resolved from the supplied input.
+
+    - name: Apply Kubernetes definitions
+      kubernetes.core.k8s:
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+        state: present
+        definition: "{{ item }}"
+        apply: true
+        server_side_apply: >-
+          {{
+            {
+              'field_manager': dev_infra_deployment_apply_field_manager
+                | default('dev-infra-deployment'),
+              'force_conflicts': true
+            }
+            if (dev_infra_deployment_apply_server_side | default(false) | bool)
+            else omit
+          }}
+      loop: "{{ dev_infra_deployment_apply_definitions_resolved }}"
+      no_log: "{{ dev_infra_deployment_apply_no_log | default(false) | bool }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
   vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
-  when: not (dev_infra_deployment_apply_server_side | default(false) | bool)
-
-- name: Server-side apply Kubernetes manifest {{ dev_infra_deployment_apply_path }}
-  kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
-    state: present
-    src: "{{ item }}"
-    apply: true
-    server_side_apply:
-      field_manager: "{{ dev_infra_deployment_apply_field_manager | default('dev-infra-deployment') }}"
-      force_conflicts: true
-  loop: "{{ dev_infra_deployment_apply_manifest_files }}"
-  vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
-  when: dev_infra_deployment_apply_server_side | default(false) | bool
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

@@ -5,12 +5,34 @@
       - opensearch_dashboard_password | string | length > 0
   no_log: true
 
-- name: Stage Dashboard artifacts
-  ansible.builtin.import_tasks: stage.yml
+- name: Resolve Dashboard Helm values
+  ansible.builtin.set_fact:
+    dev_infra_deployment_dashboard_release_values: >-
+      {{
+        (lookup('ansible.builtin.file', role_path ~ '/files/k8s/values.yaml') | from_yaml)
+        | combine(
+            lookup('ansible.builtin.template', role_path ~ '/templates/values-secret.yaml.j2')
+            | from_yaml,
+            recursive=true
+          )
+      }}
+  no_log: true
+
+- name: Resolve Dashboard Kubernetes definitions
+  ansible.builtin.set_fact:
+    dev_infra_deployment_dashboard_local_definitions: >-
+      {{
+        (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/httproute.yaml')
+         | from_yaml_all | reject('equalto', none) | list)
+        + (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/networkpolicy.yaml')
+           | from_yaml_all | reject('equalto', none) | list)
+        + (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/pdb.yaml')
+           | from_yaml_all | reject('equalto', none) | list)
+      }}
 
 - name: Delete stale Dashboard TLS resources
   kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: "{{ item.api_version }}"
     kind: "{{ item.kind }}"
     namespace: "{{ dev_infra_deployment_namespace }}"
@@ -37,13 +59,16 @@
     dev_infra_deployment_helm_chart_ref: "{{ dev_infra_deployment_dashboard_chart_ref }}"
     dev_infra_deployment_helm_chart_version: "{{ dev_infra_deployment_dashboard_chart_version }}"
     dev_infra_deployment_helm_namespace: "{{ dev_infra_deployment_namespace }}"
-    dev_infra_deployment_helm_values_files: "{{ dev_infra_deployment_dashboard_values_files }}"
+    dev_infra_deployment_helm_release_values:
+      "{{ dev_infra_deployment_dashboard_release_values }}"
     dev_infra_deployment_helm_wait: true
     dev_infra_deployment_helm_timeout: "{{ dev_infra_deployment_dashboard_timeout }}"
+    dev_infra_deployment_helm_no_log: true
+  no_log: true
 
 - name: Check APISIX CRD before stale Dashboard route cleanup
   kubernetes.core.k8s_info:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: apiextensions.k8s.io/v1
     kind: CustomResourceDefinition
     name: apisixroutes.apisix.apache.org
@@ -53,7 +78,7 @@
 
 - name: Delete stale Dashboard APISIX CRD routes
   kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: "{{ item.api_version }}"
     kind: "{{ item.kind }}"
     namespace: "{{ dev_infra_deployment_namespace }}"
@@ -75,7 +100,7 @@
 
 - name: Check APISIX BackendTrafficPolicy CRD before stale Dashboard backend cleanup
   kubernetes.core.k8s_info:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: apiextensions.k8s.io/v1
     kind: CustomResourceDefinition
     name: backendtrafficpolicies.apisix.apache.org
@@ -85,7 +110,7 @@
 
 - name: Delete stale Dashboard local resources
   kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: "{{ item.api_version }}"
     kind: "{{ item.kind }}"
     namespace: "{{ dev_infra_deployment_namespace }}"
@@ -103,7 +128,8 @@
     name: dev_infra.deployment.k8s_deployment
     tasks_from: apply_manifest
   vars:
-    dev_infra_deployment_apply_path: "{{ dev_infra_deployment_dashboard_local_manifests }}"
+    dev_infra_deployment_apply_definitions:
+      "{{ dev_infra_deployment_dashboard_local_definitions }}"
     dev_infra_deployment_apply_server_side: true
     dev_infra_deployment_apply_field_manager: "{{ dev_infra_deployment_dashboard_field_manager }}"
 

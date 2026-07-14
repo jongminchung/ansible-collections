@@ -5,12 +5,24 @@
       "Skipping Kubernetes Job {{ dev_infra_deployment_job_name }} because check mode must not create or
       delete Jobs."
   when: ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Run Kubernetes Job {{ dev_infra_deployment_job_name }}
   block:
+    - name: Resolve Kubernetes Job definition
+      ansible.builtin.set_fact:
+        dev_infra_deployment_job_definition_resolved: >-
+          {{
+            dev_infra_deployment_job_definition
+            if (dev_infra_deployment_job_definition is defined)
+            else (lookup('ansible.builtin.file', dev_infra_deployment_job_manifest) | from_yaml)
+          }}
+
     - name: Delete previous Kubernetes Job {{ dev_infra_deployment_job_name }}
       kubernetes.core.k8s:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         state: absent
         api_version: batch/v1
         kind: Job
@@ -19,20 +31,20 @@
         wait: true
         wait_timeout: "{{ dev_infra_deployment_job_delete_timeout_seconds }}"
       vars:
-        ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
 
-    - name: Apply Kubernetes Job manifest {{ dev_infra_deployment_job_manifest }}
+    - name: Apply Kubernetes Job {{ dev_infra_deployment_job_name }}
       kubernetes.core.k8s:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         state: present
-        src: "{{ dev_infra_deployment_job_manifest }}"
+        definition: "{{ dev_infra_deployment_job_definition_resolved }}"
         apply: true
       vars:
-        ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
 
     - name: Wait for Kubernetes Job {{ dev_infra_deployment_job_name }} to complete
       kubernetes.core.k8s_info:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         api_version: batch/v1
         kind: Job
         namespace: "{{ dev_infra_deployment_job_namespace }}"
@@ -45,12 +57,12 @@
         wait_timeout:
           "{{ dev_infra_deployment_job_timeout_seconds | default(dev_infra_deployment_wait_timeout_seconds) }}"
       vars:
-        ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       changed_when: false
   rescue:
     - name: Read failed Kubernetes Job {{ dev_infra_deployment_job_name }} logs
       kubernetes.core.k8s_log:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         api_version: batch/v1
         kind: Job
         namespace: "{{ dev_infra_deployment_job_namespace }}"
@@ -59,7 +71,7 @@
         tail_lines: 200
       register: dev_infra_deployment_job_log
       vars:
-        ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       failed_when: false
       changed_when: false
 
@@ -74,7 +86,7 @@
   always:
     - name: Delete Kubernetes Job {{ dev_infra_deployment_job_name }} after run
       kubernetes.core.k8s:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         state: absent
         api_version: batch/v1
         kind: Job
@@ -85,12 +97,12 @@
         wait: true
         wait_timeout: "{{ dev_infra_deployment_job_delete_timeout_seconds }}"
       vars:
-        ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: not ansible_check_mode
 
     - name: Delete Kubernetes Job Pods {{ dev_infra_deployment_job_name }} after run
       kubernetes.core.k8s:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         state: absent
         api_version: v1
         kind: Pod
@@ -103,6 +115,9 @@
         wait: true
         wait_timeout: "{{ dev_infra_deployment_job_delete_timeout_seconds }}"
       vars:
-        ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: not ansible_check_mode
   when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true

@@ -23,7 +23,7 @@
   block:
     - name: Read OpenSearch admin credentials
       kubernetes.core.k8s_info:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         api_version: v1
         kind: Secret
         namespace: "{{ dev_infra_deployment_namespace }}"
@@ -41,7 +41,7 @@
 
     - name: Check OpenSearch cluster health through pod exec
       kubernetes.core.k8s_exec:
-        kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
         namespace: "{{ dev_infra_deployment_namespace }}"
         pod: "{{ dev_infra_deployment_opensearch_statefulset_name }}-0"
         command:

@@ -15,6 +15,3 @@ argument_specs:
   verify:
     short_description: Verify Dashboard workload readiness.
     options: {}
-  stage:
-    short_description: Stage Dashboard-owned static artifacts on the target host.
-    options: {}

@@ -4,23 +4,28 @@
 
 - name: Kickstart stateful workloads
   hosts: k8s_workload_mgr
-  become: true
+  become: false
   gather_facts: false
   tasks:
-    - name: Initialize or unseal Vault
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.vault
-        tasks_from: kickstart
-      tags: [vault]
+    - name: Kickstart stateful workloads from the Ansible control node
+      block:
+        - name: Initialize or unseal Vault
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.vault
+            tasks_from: kickstart
+          tags: [vault]
 
-    - name: Apply internal PKI after Vault is ready
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.internal_pki_issuer
-        tasks_from: configure
-      tags: [internal_pki_issuer, pki, tls]
+        - name: Apply internal PKI after Vault is ready
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.internal_pki_issuer
+            tasks_from: configure
+          tags: [internal_pki_issuer, pki, tls]
 
-    - name: Kickstart OpenSearch post-deployment state
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.opensearch
-        tasks_from: kickstart
-      tags: [opensearch]
+        - name: Kickstart OpenSearch post-deployment state
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.opensearch
+            tasks_from: kickstart
+          tags: [opensearch]
+      delegate_to: localhost
+      become: false
+      run_once: true

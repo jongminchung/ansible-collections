@@ -1,0 +1,52 @@
+---
+- name: Skip Helm CRD apply in check mode
+  ansible.builtin.debug:
+    msg: "Skipping Helm CRD apply for {{ dev_infra_deployment_helm_crd_chart_ref }} in check mode."
+  when: ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Apply Helm chart CRDs from the Ansible control node
+  block:
+    - name: Read Helm chart CRDs
+      ansible.builtin.command:
+        argv:
+          - "{{ dev_infra_deployment_helm_bin }}"
+          - show
+          - crds
+          - "{{ dev_infra_deployment_helm_crd_chart_ref }}"
+          - --version
+          - "{{ dev_infra_deployment_helm_crd_chart_version }}"
+      register: dev_infra_deployment_helm_crds_result
+      changed_when: false
+      check_mode: false
+
+    - name: Resolve selected Helm chart CRDs
+      ansible.builtin.set_fact:
+        dev_infra_deployment_helm_crd_definitions: >-
+          {{
+            dev_infra_deployment_helm_crds_result.stdout
+            | from_yaml_all
+            | reject('equalto', none)
+            | selectattr('metadata.name', 'defined')
+            | selectattr('metadata.name', 'search', dev_infra_deployment_helm_crd_name_pattern | default('.*'))
+            | list
+          }}
+
+    - name: Apply selected Helm chart CRDs
+      kubernetes.core.k8s:
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+        state: present
+        definition: "{{ item }}"
+        apply: true
+        server_side_apply:
+          field_manager: dev-infra-deployment
+          force_conflicts: true
+      loop: "{{ dev_infra_deployment_helm_crd_definitions }}"
+  when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

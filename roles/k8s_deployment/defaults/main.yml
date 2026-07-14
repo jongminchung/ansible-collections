@@ -1,15 +1,9 @@
 ---
-dev_infra_deployment_staging_root: /opt/dev-infra-deployment
-dev_infra_deployment_artifacts_root: "{{ dev_infra_deployment_staging_root }}/artifacts"
-dev_infra_deployment_python_venv: /opt/dev-infra-deployment/ansible-venv
-dev_infra_deployment_python_interpreter: "{{ dev_infra_deployment_python_venv }}/bin/python"
-dev_infra_deployment_python_packages:
-  - "kubernetes>=24.2.0"
-  - "PyYAML>=3.11"
-  - jsonpatch
-dev_infra_deployment_helm_bin: /usr/local/bin/helm
-dev_infra_deployment_kubectl_bin: /var/lib/rancher/rke2/bin/kubectl
-dev_infra_deployment_kubeconfig: /etc/rancher/rke2/rke2.yaml
+dev_infra_deployment_python_interpreter: "{{ ansible_playbook_python }}"
+dev_infra_deployment_helm_bin: helm
+dev_infra_deployment_control_node_kubeconfig_path:
+  "{{ (inventory_dir | dirname) ~ '/.ansible/runtime/kubeconfig' }}"
+dev_infra_deployment_validate_kubeconfig: true
 dev_infra_deployment_wait_timeout: 5m
 dev_infra_deployment_wait_timeout_seconds: 300
 dev_infra_deployment_long_wait_timeout: 10m

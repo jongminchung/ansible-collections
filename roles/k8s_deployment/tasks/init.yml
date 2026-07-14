@@ -1,4 +1,9 @@
 ---
+- name: Validate Ansible control node dependencies
+  ansible.builtin.import_tasks: validate_control_node.yml
+  vars:
+    dev_infra_deployment_validate_kubeconfig: false
+
 - name: Validate deployment inventory groups
   ansible.builtin.assert:
     that:

@@ -1,6 +1,9 @@
 ---
-- name: Stage OpenSearch artifacts
-  ansible.builtin.import_tasks: stage.yml
+- name: Resolve OpenSearch index template Job definition
+  ansible.builtin.set_fact:
+    dev_infra_deployment_opensearch_index_template_job_definition: >-
+      {{ lookup('ansible.builtin.file', role_path ~ '/files/k8s/jobs/index-template-job.yaml')
+         | from_yaml }}
 
 - name: Wait for OpenSearch rollout
   ansible.builtin.include_role:
@@ -28,7 +31,8 @@
     tasks_from: run_job
   vars:
     dev_infra_deployment_job_name: "{{ dev_infra_deployment_opensearch_index_template_job_name }}"
-    dev_infra_deployment_job_manifest: "{{ dev_infra_deployment_opensearch_index_template_job_manifest }}"
+    dev_infra_deployment_job_definition:
+      "{{ dev_infra_deployment_opensearch_index_template_job_definition }}"
     dev_infra_deployment_job_namespace: "{{ dev_infra_deployment_namespace }}"
     dev_infra_deployment_job_timeout_seconds: "{{ dev_infra_deployment_opensearch_job_timeout_seconds }}"
 

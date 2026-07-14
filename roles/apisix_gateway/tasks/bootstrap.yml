@@ -1,63 +1,30 @@
 ---
 - name: Resolve APISIX Gateway role request state
   ansible.builtin.set_fact:
-    apisix_gateway_role_requested:
-      "{{ ((ansible_run_tags | default(['all'])) | intersect(['all', 'apisix_gateway', 'apisix',
-      'gateway_api']) | length) > 0 }}"
-  tags:
-    - always
+    apisix_gateway_role_requested: >-
+      {{
+        ((ansible_run_tags | default(['all']))
+        | intersect(['all', 'apisix_gateway', 'apisix', 'gateway_api'])
+        | length) > 0
+      }}
+  tags: [always]
 
-- name: Resolve APISIX origin TLS material
+- name: Resolve APISIX sensitive settings
   ansible.builtin.set_fact:
-    apisix_origin_tls_cert_resolved: "{{ apisix_origin_tls_cert }}"
-    apisix_origin_tls_key_resolved: "{{ apisix_origin_tls_key }}"
-  no_log: true
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
-
-- name: Resolve APISIX admin credentials
-  ansible.builtin.set_fact:
-    apisix_admin_key_resolved: "{{ apisix_admin_key }}"
-    apisix_viewer_key_resolved: "{{ apisix_viewer_key }}"
-  no_log: true
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
-
-- name: Resolve APISIX origin TLS state
-  ansible.builtin.set_fact:
-    apisix_origin_tls_enabled:
-      "{{ (apisix_origin_tls_cert_resolved | string | length > 0) and
-      (apisix_origin_tls_key_resolved | string | length > 0) }}"
-  no_log: true
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
-
-- name: Resolve APISIX HTTPS certificate references
-  ansible.builtin.set_fact:
+    apisix_origin_tls_enabled: >-
+      {{ (apisix_origin_tls_cert | length > 0) and (apisix_origin_tls_key | length > 0) }}
     apisix_gateway_https_certificate_refs_resolved: >-
       {{
         (
           apisix_gateway_https_certificate_refs
           if (apisix_gateway_https_certificate_refs | length > 0)
-          else (
-            [{'name': apisix_gateway_tls_secret_name}]
-            if (apisix_origin_tls_enabled | bool)
-            else []
-          )
-        )
-        + apisix_gateway_extra_https_certificate_refs
+          else ([{'name': apisix_gateway_tls_secret_name}]
+                if ((apisix_origin_tls_cert | length > 0) and
+                    (apisix_origin_tls_key | length > 0)) else [])
+        ) + apisix_gateway_extra_https_certificate_refs
       }}
-  when:
-    - apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
+  no_log: true
+  when: apisix_gateway_role_requested | bool
 
 - name: Resolve APISIX HTTPS listeners
   ansible.builtin.set_fact:
@@ -66,94 +33,24 @@
         apisix_gateway_https_listeners
         if (apisix_gateway_https_listeners | length > 0)
         else (
-          [
-            {
-              'name': 'https',
-              'certificate_refs': apisix_gateway_https_certificate_refs_resolved
-            }
-          ]
-          if (apisix_gateway_https_certificate_refs_resolved | length > 0)
-          else []
+          [{'name': 'https',
+            'certificate_refs': apisix_gateway_https_certificate_refs_resolved}]
+          if (apisix_gateway_https_certificate_refs_resolved | length > 0) else []
         )
       }}
   when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
 
-- name: Resolve APISIX HTTPS listener certificate references
+- name: Resolve APISIX Gateway settings
   ansible.builtin.set_fact:
     apisix_gateway_https_listener_certificate_refs: >-
+      {{ apisix_gateway_https_listeners_resolved | map(attribute='certificate_refs') | flatten }}
+    apisix_gateway_annotations_resolved: >-
       {{
-        apisix_gateway_https_listeners_resolved
-        | map(attribute='certificate_refs')
-        | flatten
+        {
+          'external-dns.alpha.kubernetes.io/target': apisix_gateway_external_dns_target,
+          'external-dns.kubernetes.io/target': apisix_gateway_external_dns_target
+        } | combine(apisix_gateway_annotations)
       }}
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
-
-- name: Validate APISIX Gateway settings
-  ansible.builtin.assert:
-    that:
-      - apisix_namespace | length > 0
-      - apisix_release_name | length > 0
-      - apisix_chart_ref | length > 0
-      - apisix_chart_version | string | length > 0
-      - apisix_chart_repo_name | length > 0
-      - apisix_chart_repo_url | length > 0
-      - apisix_gateway_api_version | length > 0
-      - apisix_gateway_api_install_url | length > 0
-      - apisix_gateway_class_name | length > 0
-      - apisix_gateway_name | length > 0
-      - apisix_gateway_proxy_name | length > 0
-      - apisix_controller_name | length > 0
-      - apisix_gateway_external_dns_target | length > 0
-      - apisix_gateway_wait_timeout | length > 0
-      - apisix_gateway_annotations is mapping
-      - apisix_gateway_https_certificate_refs is iterable
-      - apisix_gateway_https_certificate_refs is not string
-      - apisix_gateway_extra_https_certificate_refs is iterable
-      - apisix_gateway_extra_https_certificate_refs is not string
-      - apisix_gateway_https_listeners is iterable
-      - apisix_gateway_https_listeners is not string
-      - apisix_gateway_https_certificate_refs_resolved is iterable
-      - apisix_gateway_https_certificate_refs_resolved is not string
-      - apisix_gateway_https_listeners_resolved is iterable
-      - apisix_gateway_https_listeners_resolved is not string
-      - apisix_gateway_https_listener_certificate_refs is iterable
-      - apisix_gateway_https_listener_certificate_refs is not string
-      - apisix_helm_values is mapping
-      - apisix_admin_key_resolved | length > 0
-      - apisix_viewer_key_resolved | length > 0
-      - not (apisix_helm_values.service.type == 'LoadBalancer') or (apisix_origin_tls_enabled |
-        bool) or (apisix_gateway_https_listeners_resolved | length > 0)
-    fail_msg: APISIX Gateway role settings are invalid.
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - validate
-
-- name: Validate APISIX Gateway HTTPS listeners
-  ansible.builtin.assert:
-    that:
-      - item.name | default('') | length > 0
-      - item.certificate_refs | default([]) is iterable
-      - item.certificate_refs | default([]) is not string
-      - item.certificate_refs | default([]) | length > 0
-      - item.hostname is not defined or (item.hostname | string | length > 0)
-    fail_msg: APISIX Gateway HTTPS listener settings are invalid.
-  loop: "{{ apisix_gateway_https_listeners_resolved }}"
-  loop_control:
-    label: "{{ item.name | default('unnamed') }}"
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - validate
-
-- name: Resolve APISIX Helm values
-  ansible.builtin.set_fact:
     apisix_helm_values_resolved: >-
       {{
         apisix_helm_values
@@ -162,8 +59,8 @@
             'apisix': {
               'admin': {
                 'credentials': {
-                  'admin': apisix_admin_key_resolved,
-                  'viewer': apisix_viewer_key_resolved
+                  'admin': apisix_admin_key,
+                  'viewer': apisix_viewer_key
                 }
               }
             },
@@ -171,11 +68,7 @@
               'gatewayProxy': {
                 'provider': {
                   'controlPlane': {
-                    'auth': {
-                      'adminKey': {
-                        'value': apisix_admin_key_resolved
-                      }
-                    }
+                    'auth': {'adminKey': {'value': apisix_admin_key}}
                   }
                 }
               }
@@ -186,349 +79,187 @@
       }}
   no_log: true
   when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - vault
 
-- name: Resolve APISIX Gateway annotations
-  ansible.builtin.set_fact:
-    apisix_gateway_annotations_resolved: >-
-      {{
-        {
-          'external-dns.alpha.kubernetes.io/target': apisix_gateway_external_dns_target,
-          'external-dns.kubernetes.io/target': apisix_gateway_external_dns_target
-        }
-        | combine(apisix_gateway_annotations)
-      }}
+- name: Validate APISIX Gateway settings
+  ansible.builtin.assert:
+    that:
+      - apisix_namespace | length > 0
+      - apisix_release_name | length > 0
+      - apisix_chart_ref | length > 0
+      - apisix_chart_version | string | length > 0
+      - apisix_chart_repo_name | length > 0
+      - apisix_chart_repo_url | length > 0
+      - apisix_gateway_api_install_url | length > 0
+      - apisix_gateway_class_name | length > 0
+      - apisix_gateway_name | length > 0
+      - apisix_admin_key | length > 0
+      - apisix_viewer_key | length > 0
+      - apisix_gateway_https_listeners_resolved is iterable
+      - apisix_helm_values_resolved is mapping
+    fail_msg: APISIX Gateway role settings are invalid.
+  no_log: true
   when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - validate
+  tags: [always, validate]
 
-- name: Resolve APISIX Helm upgrade arguments
-  ansible.builtin.set_fact:
-    apisix_helm_upgrade_base_argv: >-
-      {{
-        [
-          '/usr/local/bin/helm',
-          'upgrade',
-          '--install',
-          apisix_release_name,
-          apisix_chart_ref,
-          '--version',
-          apisix_chart_version,
-          '--namespace',
-          apisix_namespace,
-          '--skip-crds'
-        ]
-      }}
-    apisix_helm_existing_release_args: >-
-      {{
-        [
-          '--reuse-values',
-          '--set',
-          'service.type=' ~ apisix_helm_values.service.type,
-          '--set',
-          'service.externalTrafficPolicy=' ~ apisix_helm_values.service.externalTrafficPolicy,
-          '--set-json',
-          'service.externalIPs=' ~ (apisix_gateway_service_external_ips | to_json),
-          '--set',
-          'service.http.enabled=' ~ (apisix_helm_values.service.http.enabled | bool | string |
-      lower),
-          '--set',
-          'service.http.servicePort=' ~ (apisix_helm_values.service.http.servicePort | string),
-          '--set',
-          'service.tls.servicePort=' ~ (apisix_helm_values.service.tls.servicePort | string),
-          '--set',
-          'apisix.ssl.enabled=' ~ (apisix_helm_values.apisix.ssl.enabled | bool | string | lower),
-          '--set',
-          'ingress-controller.enabled=' ~ (
-            apisix_helm_values['ingress-controller'].enabled | bool | string | lower
-          ),
-          '--set',
-          'ingress-controller.config.listenerPortMatchMode=' ~ (
-            apisix_helm_values['ingress-controller'].config.listenerPortMatchMode
-          )
-        ]
-      }}
-  when: apisix_gateway_role_requested | bool
-  tags:
-    - always
-    - validate
-
-- name: Check APISIX Gateway HTTPS certificate Secret references
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - get
-      - secret
-      - "{{ item.name }}"
-      - --namespace
-      - "{{ apisix_namespace }}"
-  register: apisix_gateway_https_secret_checks
-  changed_when: false
-  when:
-    - apisix_gateway_role_requested | bool
-    - not ansible_check_mode
-  loop: "{{ apisix_gateway_https_listener_certificate_refs }}"
+- name: Validate APISIX Gateway HTTPS listeners
+  ansible.builtin.assert:
+    that:
+      - item.name | default('') | length > 0
+      - item.certificate_refs | default([]) is iterable
+      - item.certificate_refs | default([]) is not string
+      - item.certificate_refs | default([]) | length > 0
+    fail_msg: APISIX Gateway HTTPS listener settings are invalid.
+  loop: "{{ apisix_gateway_https_listeners_resolved }}"
   loop_control:
-    label: "{{ item.name }}"
-  tags:
-    - apisix_gateway
-    - validate
-
-- name: Install APISIX Gateway prerequisites
-  ansible.builtin.apt:
-    name:
-      - ca-certificates
-      - curl
-    state: present
-    update_cache: true
-
-- name: Check Helm binary
-  ansible.builtin.stat:
-    path: /usr/local/bin/helm
-  register: apisix_helm_binary
-
-- name: Download Helm installer
-  ansible.builtin.get_url:
-    url: "{{ apisix_helm_install_script_url }}"
-    dest: /tmp/get-helm-3.sh
-    owner: root
-    group: root
-    mode: "0755"
-  when: not apisix_helm_binary.stat.exists
-
-- name: Install Helm
-  ansible.builtin.command:
-    argv:
-      - /bin/bash
-      - /tmp/get-helm-3.sh
-  when: not apisix_helm_binary.stat.exists
+    label: "{{ item.name | default('unnamed') }}"
+  when: apisix_gateway_role_requested | bool
 
 - name: Ensure APISIX namespace exists
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - create
-      - namespace
-      - "{{ apisix_namespace }}"
-  register: apisix_namespace_create
-  changed_when: apisix_namespace_create.rc == 0
-  failed_when:
-    - apisix_namespace_create.rc != 0
-    - "'AlreadyExists' not in apisix_namespace_create.stderr"
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: ensure_namespace
+  vars:
+    dev_infra_deployment_target_namespace: "{{ apisix_namespace }}"
+  when: apisix_gateway_role_requested | bool
 
-- name: Configure APISIX origin TLS secret
-  block:
-    - name: Create APISIX origin TLS temp directory
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: apisix-origin-tls-
-      register: apisix_origin_tls_temp_dir
-
-    - name: Write APISIX origin certificate
-      ansible.builtin.copy:
-        content: "{{ apisix_origin_tls_cert_resolved }}"
-        dest: "{{ apisix_origin_tls_temp_dir.path }}/tls.crt"
-        owner: root
-        group: root
-        mode: "0600"
-
-    - name: Write APISIX origin private key
-      ansible.builtin.copy:
-        content: "{{ apisix_origin_tls_key_resolved }}"
-        dest: "{{ apisix_origin_tls_temp_dir.path }}/tls.key"
-        owner: root
-        group: root
-        mode: "0600"
-
-    - name: Apply APISIX origin TLS secret
-      ansible.builtin.shell: >-
-        set -o pipefail && {{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}
-        create secret tls {{ apisix_gateway_tls_secret_name | quote }} --namespace {{
-        apisix_namespace | quote }} --cert={{ (apisix_origin_tls_temp_dir.path ~ '/tls.crt') | quote
-        }} --key={{ (apisix_origin_tls_temp_dir.path ~ '/tls.key') | quote }} --dry-run=client -o
-        yaml | {{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }} apply -f -
-      args:
-        executable: /bin/bash
-  always:
-    - name: Remove APISIX origin TLS temp directory
-      ansible.builtin.file:
-        path: "{{ apisix_origin_tls_temp_dir.path }}"
-        state: absent
-      when: apisix_origin_tls_temp_dir.path is defined
+- name: Apply APISIX origin TLS Secret
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_definitions:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ apisix_gateway_tls_secret_name }}"
+        namespace: "{{ apisix_namespace }}"
+      type: kubernetes.io/tls
+      stringData:
+        tls.crt: "{{ apisix_origin_tls_cert }}"
+        tls.key: "{{ apisix_origin_tls_key }}"
+    dev_infra_deployment_apply_server_side: false
+    dev_infra_deployment_apply_no_log: true
   no_log: true
   when:
+    - apisix_gateway_role_requested | bool
     - apisix_origin_tls_enabled | bool
-    - not ansible_check_mode
 
-- name: Install Gateway API CRDs
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - apply
-      - --server-side=true
-      - -f
-      - "{{ apisix_gateway_api_install_url }}"
-  register: apisix_gateway_api_apply
-  changed_when: "'unchanged' not in apisix_gateway_api_apply.stdout"
+- name: Apply Gateway API CRDs
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_url: "{{ apisix_gateway_api_install_url }}"
+    dev_infra_deployment_apply_server_side: true
+  when: apisix_gateway_role_requested | bool
 
-- name: Add APISIX Helm repository
-  ansible.builtin.command:
-    argv:
-      - /usr/local/bin/helm
-      - repo
-      - add
-      - "{{ apisix_chart_repo_name }}"
-      - "{{ apisix_chart_repo_url }}"
-      - --force-update
-  register: apisix_helm_repo_add
-  changed_when:
-    "'has been added' in apisix_helm_repo_add.stdout or 'has been updated' in
-    apisix_helm_repo_add.stdout"
+- name: Configure APISIX Helm repository
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: helm_repo
+  vars:
+    dev_infra_deployment_helm_repo_name: "{{ apisix_chart_repo_name }}"
+    dev_infra_deployment_helm_repo_url: "{{ apisix_chart_repo_url }}"
+  when: apisix_gateway_role_requested | bool
 
-- name: Update APISIX Helm repository
-  ansible.builtin.command:
-    argv:
-      - /usr/local/bin/helm
-      - repo
-      - update
-      - "{{ apisix_chart_repo_name }}"
-  changed_when: false
-
-- name: Install APISIX CRDs from Helm chart
-  ansible.builtin.shell: >-
-    set -o pipefail && /usr/local/bin/helm show crds {{ apisix_chart_ref | quote }} | awk 'BEGIN {
-    RS="---"; ORS="" } /name: .*\.apisix\.apache\.org/ { print "---\n" $0 }' | {{ k8s_kubectl_bin |
-    default('/var/lib/rancher/rke2/bin/kubectl') }} apply --server-side=true -f -
-  args:
-    executable: /bin/bash
-  register: apisix_crds_apply
-  changed_when: "'unchanged' not in apisix_crds_apply.stdout"
+- name: Apply APISIX chart CRDs
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_helm_crds
+  vars:
+    dev_infra_deployment_helm_crd_chart_ref: "{{ apisix_chart_ref }}"
+    dev_infra_deployment_helm_crd_chart_version: "{{ apisix_chart_version }}"
+    dev_infra_deployment_helm_crd_name_pattern: ".*\\.apisix\\.apache\\.org$"
+  when: apisix_gateway_role_requested | bool
 
 - name: Install or upgrade APISIX Gateway
-  block:
-    - name: Create APISIX Helm values temp directory
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: apisix-helm-
-      register: apisix_helm_values_temp_dir
-      when: not (apisix_helm_release_exists | bool)
-
-    - name: Render APISIX Helm values
-      ansible.builtin.copy:
-        content: "{{ apisix_helm_values_resolved | to_nice_yaml }}"
-        dest: "{{ apisix_helm_values_temp_dir.path }}/values.yaml"
-        owner: root
-        group: root
-        mode: "0600"
-      when: not (apisix_helm_release_exists | bool)
-
-    - name: Apply APISIX Helm release
-      ansible.builtin.command:
-        argv: >-
-          {{
-            (
-              apisix_helm_upgrade_base_argv
-              + apisix_helm_existing_release_args
-            )
-            if (apisix_helm_release_exists | bool)
-            else (
-              apisix_helm_upgrade_base_argv
-              + ['--values', apisix_helm_values_temp_dir.path ~ '/values.yaml']
-            )
-          }}
-      environment:
-        KUBECONFIG: "{{ k8s_kubeconfig | default('/etc/rancher/rke2/rke2.yaml') }}"
-      register: apisix_helm_upgrade
-      changed_when:
-        "'has been upgraded' in apisix_helm_upgrade.stdout or 'has been installed' in
-        apisix_helm_upgrade.stdout"
-  always:
-    - name: Remove APISIX Helm values temp directory
-      ansible.builtin.file:
-        path: "{{ apisix_helm_values_temp_dir.path }}"
-        state: absent
-      when: apisix_helm_values_temp_dir.path is defined
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: helm_release
+  vars:
+    dev_infra_deployment_helm_release_name: "{{ apisix_release_name }}"
+    dev_infra_deployment_helm_chart_ref: "{{ apisix_chart_ref }}"
+    dev_infra_deployment_helm_chart_version: "{{ apisix_chart_version }}"
+    dev_infra_deployment_helm_namespace: "{{ apisix_namespace }}"
+    dev_infra_deployment_helm_release_values: "{{ apisix_helm_values_resolved }}"
+    dev_infra_deployment_helm_skip_crds: true
+    dev_infra_deployment_helm_wait: true
+    dev_infra_deployment_helm_timeout: "{{ apisix_gateway_wait_timeout }}"
+    dev_infra_deployment_helm_no_log: true
   no_log: true
-  when: not ansible_check_mode
+  when: apisix_gateway_role_requested | bool
+
+- name: Validate APISIX HTTPS certificate Secret references
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: assert_resources
+  vars:
+    dev_infra_deployment_required_resources: >-
+      {{
+        apisix_gateway_https_listener_certificate_refs
+        | map('combine', {'api_version': 'v1', 'kind': 'Secret', 'namespace': apisix_namespace})
+        | list
+      }}
+  when:
+    - apisix_gateway_role_requested | bool
+    - apisix_gateway_https_listener_certificate_refs | length > 0
+
+- name: Resolve APISIX Gateway API definition
+  ansible.builtin.set_fact:
+    apisix_gateway_definition: >-
+      {{ lookup('ansible.builtin.template', role_path ~ '/templates/gateway-api.yaml.j2')
+         | from_yaml_all | reject('equalto', none) | list }}
+  when: apisix_gateway_role_requested | bool
 
 - name: Apply APISIX Gateway API resources
-  ansible.builtin.template:
-    src: gateway-api.yaml.j2
-    dest: /tmp/apisix-gateway-api.yaml
-    owner: root
-    group: root
-    mode: "0644"
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_definitions: "{{ apisix_gateway_definition }}"
+    dev_infra_deployment_apply_server_side: false
+  when: apisix_gateway_role_requested | bool
 
-- name: Configure APISIX GatewayClass and Gateway
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - apply
-      - -f
-      - /tmp/apisix-gateway-api.yaml
-  register: apisix_gateway_apply
-  changed_when: "'unchanged' not in apisix_gateway_apply.stdout"
-
-- name: Wait for APISIX rollout
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - rollout
-      - status
-      - deployment/apisix
-      - --namespace
-      - "{{ apisix_namespace }}"
-      - --timeout={{ apisix_gateway_wait_timeout }}
-  changed_when: false
-
-- name: Wait for APISIX controller rollout
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - rollout
-      - status
-      - deployment/apisix-ingress-controller
-      - --namespace
-      - "{{ apisix_namespace }}"
-      - --timeout={{ apisix_gateway_wait_timeout }}
-  changed_when: false
+- name: Wait for APISIX rollouts
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ apisix_namespace }}"
+    dev_infra_deployment_rollout_resource: "deployment/{{ item }}"
+    dev_infra_deployment_rollout_timeout_seconds:
+      "{{ apisix_gateway_wait_timeout | regex_replace('s$', '') | int }}"
+  loop:
+    - apisix
+    - apisix-ingress-controller
+  when: apisix_gateway_role_requested | bool
 
 - name: Wait for APISIX GatewayClass acceptance
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - wait
-      - --for=condition=Accepted
-      - gatewayclass/{{ apisix_gateway_class_name }}
-      - --timeout={{ apisix_gateway_wait_timeout }}
-  changed_when: false
-  when: not ansible_check_mode
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_condition
+  vars:
+    dev_infra_deployment_wait_api_version: gateway.networking.k8s.io/v1
+    dev_infra_deployment_wait_kind: GatewayClass
+    dev_infra_deployment_wait_name: "{{ apisix_gateway_class_name }}"
+    dev_infra_deployment_wait_condition_type: Accepted
+    dev_infra_deployment_wait_timeout_seconds:
+      "{{ apisix_gateway_wait_timeout | regex_replace('s$', '') | int }}"
+  when: apisix_gateway_role_requested | bool
 
-- name: Wait for APISIX Gateway acceptance
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - wait
-      - --for=condition=Accepted
-      - gateway/{{ apisix_gateway_name }}
-      - --namespace
-      - "{{ apisix_namespace }}"
-      - --timeout={{ apisix_gateway_wait_timeout }}
-  changed_when: false
-  when: not ansible_check_mode
-
-- name: Wait for APISIX Gateway programming
-  ansible.builtin.command:
-    argv:
-      - "{{ k8s_kubectl_bin | default('/var/lib/rancher/rke2/bin/kubectl') }}"
-      - wait
-      - --for=condition=Programmed
-      - gateway/{{ apisix_gateway_name }}
-      - --namespace
-      - "{{ apisix_namespace }}"
-      - --timeout={{ apisix_gateway_wait_timeout }}
-  changed_when: false
-  when: not ansible_check_mode
+- name: Wait for APISIX Gateway acceptance and programming
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_condition
+  vars:
+    dev_infra_deployment_wait_api_version: gateway.networking.k8s.io/v1
+    dev_infra_deployment_wait_kind: Gateway
+    dev_infra_deployment_wait_namespace: "{{ apisix_namespace }}"
+    dev_infra_deployment_wait_name: "{{ apisix_gateway_name }}"
+    dev_infra_deployment_wait_condition_type: "{{ item }}"
+    dev_infra_deployment_wait_timeout_seconds:
+      "{{ apisix_gateway_wait_timeout | regex_replace('s$', '') | int }}"
+  loop:
+    - Accepted
+    - Programmed
+  when: apisix_gateway_role_requested | bool

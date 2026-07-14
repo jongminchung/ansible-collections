@@ -5,7 +5,6 @@ apisix_chart_ref: apisix/apisix
 apisix_chart_version: 2.15.0
 apisix_chart_repo_name: apisix
 apisix_chart_repo_url: https://apache.github.io/apisix-helm-chart
-apisix_helm_install_script_url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
 apisix_gateway_api_version: v1.5.1
 apisix_gateway_api_install_url:
   "https://github.com/kubernetes-sigs/gateway-api/releases/download/{{ apisix_gateway_api_version

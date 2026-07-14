@@ -1,5 +1,4 @@
 ---
-
 - name: Validate internal PKI issuer settings
   ansible.builtin.assert:
     that:
@@ -12,76 +11,62 @@
       - internal_pki_issuer_vault_root_common_name | length > 0
       - internal_pki_issuer_cert_manager_namespace | length > 0
       - internal_pki_issuer_service_account_name | length > 0
-      - internal_pki_issuer_manifest_path | length > 0
-      - internal_pki_issuer_wait_timeout | length > 0
       - internal_pki_issuer_vault_initial_root_token | string | length > 0
     fail_msg: >-
       Internal PKI issuer settings are invalid. Set vault_initial_root_token as an encrypted inline
       inventory value.
   no_log: true
 
-- name: Wait for Vault pod readiness before internal PKI configure
-  kubernetes.core.k8s_info:
-    kubeconfig: "{{ internal_pki_issuer_kubeconfig }}"
-    api_version: v1
-    kind: Pod
-    namespace: "{{ internal_pki_issuer_vault_namespace }}"
-    name: "{{ internal_pki_issuer_vault_pod_name }}"
-    wait: true
-    wait_condition:
-      type: Ready
-      status: "True"
-    wait_sleep: "{{ dev_infra_deployment_pod_wait_sleep_seconds | default(5) }}"
-    wait_timeout: "{{ internal_pki_issuer_wait_timeout_seconds }}"
+- name: Wait for Vault readiness before internal PKI configure
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_condition
   vars:
-    ansible_python_interpreter: "{{ internal_pki_issuer_python_interpreter }}"
-  changed_when: false
+    dev_infra_deployment_wait_api_version: v1
+    dev_infra_deployment_wait_kind: Pod
+    dev_infra_deployment_wait_namespace: "{{ internal_pki_issuer_vault_namespace }}"
+    dev_infra_deployment_wait_name: "{{ internal_pki_issuer_vault_pod_name }}"
+    dev_infra_deployment_wait_condition_type: Ready
+    dev_infra_deployment_wait_timeout_seconds: "{{ internal_pki_issuer_wait_timeout_seconds }}"
 
-- name: Render internal PKI issuer manifests
-  ansible.builtin.template:
-    src: issuer.yaml.j2
-    dest: "{{ internal_pki_issuer_manifest_path }}"
-    owner: root
-    group: root
-    mode: "0600"
+- name: Resolve internal PKI issuer definitions
+  ansible.builtin.set_fact:
+    internal_pki_issuer_definitions: >-
+      {{ lookup('ansible.builtin.template', role_path ~ '/templates/issuer.yaml.j2')
+         | from_yaml_all | reject('equalto', none) | list }}
 
 - name: Apply internal PKI issuer RBAC and ClusterIssuer
-  kubernetes.core.k8s:
-    kubeconfig: "{{ internal_pki_issuer_kubeconfig }}"
-    state: present
-    src: "{{ internal_pki_issuer_manifest_path }}"
-    apply: true
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
   vars:
-    ansible_python_interpreter: "{{ internal_pki_issuer_python_interpreter }}"
+    dev_infra_deployment_apply_definitions: "{{ internal_pki_issuer_definitions }}"
+    dev_infra_deployment_apply_server_side: false
 
 - name: Configure Vault internal PKI backend
   kubernetes.core.k8s_exec:
-    kubeconfig: "{{ internal_pki_issuer_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     namespace: "{{ internal_pki_issuer_vault_namespace }}"
     pod: "{{ internal_pki_issuer_vault_pod_name }}"
     command: "sh -c {{ internal_pki_issuer_configure_script | quote }}"
   vars:
-    ansible_python_interpreter: "{{ internal_pki_issuer_python_interpreter }}"
-    internal_pki_issuer_configure_script:
-      "{{ lookup('ansible.builtin.template', 'configure-pki.sh.j2') }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    internal_pki_issuer_configure_script: >-
+      {{ lookup('ansible.builtin.template', role_path ~ '/templates/configure-pki.sh.j2') }}
   no_log: true
   changed_when: true
   when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Wait for internal PKI ClusterIssuer readiness
-  kubernetes.core.k8s_info:
-    kubeconfig: "{{ internal_pki_issuer_kubeconfig }}"
-    api_version: cert-manager.io/v1
-    kind: ClusterIssuer
-    name: "{{ internal_pki_issuer_name }}"
-  register: internal_pki_issuer_wait
-  until: >
-    (internal_pki_issuer_wait.resources | length > 0) and
-    (((internal_pki_issuer_wait.resources[0].status.conditions | default([])) | selectattr('type',
-    'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) > 0)
-  retries: "{{ (internal_pki_issuer_wait_timeout_seconds | int / 5) | round(0, 'ceil') | int }}"
-  delay: 5
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_condition
   vars:
-    ansible_python_interpreter: "{{ internal_pki_issuer_python_interpreter }}"
-  changed_when: false
-  when: not ansible_check_mode
+    dev_infra_deployment_wait_api_version: cert-manager.io/v1
+    dev_infra_deployment_wait_kind: ClusterIssuer
+    dev_infra_deployment_wait_name: "{{ internal_pki_issuer_name }}"
+    dev_infra_deployment_wait_condition_type: Ready
+    dev_infra_deployment_wait_timeout_seconds: "{{ internal_pki_issuer_wait_timeout_seconds }}"

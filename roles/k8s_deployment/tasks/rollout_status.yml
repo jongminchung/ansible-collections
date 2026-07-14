@@ -5,6 +5,9 @@
       "Skipping rollout wait for {{ dev_infra_deployment_rollout_resource }} because check mode does not
       roll workloads."
   when: ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Resolve rollout resource {{ dev_infra_deployment_rollout_resource }}
   ansible.builtin.set_fact:
@@ -37,7 +40,7 @@
 
 - name: Wait for rollout {{ dev_infra_deployment_rollout_resource }}
   kubernetes.core.k8s_info:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     api_version: apps/v1
     kind: "{{ dev_infra_deployment_rollout_kind }}"
     namespace: "{{ dev_infra_deployment_rollout_namespace }}"
@@ -89,8 +92,11 @@
     int) / (dev_infra_deployment_rollout_wait_sleep_seconds | int)) | round(0, 'ceil') | int }}"
   delay: "{{ dev_infra_deployment_rollout_wait_sleep_seconds }}"
   vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     dev_infra_deployment_rollout_object:
       "{{ (dev_infra_deployment_rollout_info.resources | default([]) | first) | default({}, true) }}"
   changed_when: false
   when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true

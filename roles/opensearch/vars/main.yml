@@ -1,15 +1,2 @@
 ---
-dev_infra_deployment_opensearch_artifacts_root: "{{ dev_infra_deployment_artifacts_root }}/opensearch"
 dev_infra_deployment_opensearch_field_manager: opensearch-local-resources
-dev_infra_deployment_opensearch_values_files:
-  - "{{ dev_infra_deployment_opensearch_artifacts_root }}/values.yaml"
-  - "{{ dev_infra_deployment_opensearch_artifacts_root }}/values/cluster.yaml"
-  - "{{ dev_infra_deployment_opensearch_artifacts_root }}/values/tls.yaml"
-  - "{{ dev_infra_deployment_opensearch_artifacts_root }}/values/security-config.yaml"
-  - "{{ dev_infra_deployment_opensearch_artifacts_root }}/values/security-secrets.yaml"
-dev_infra_deployment_opensearch_certificate_manifest:
-  "{{ dev_infra_deployment_opensearch_artifacts_root }}/certificate.yaml"
-dev_infra_deployment_opensearch_local_manifests:
-  "{{ dev_infra_deployment_opensearch_artifacts_root }}/manifests"
-dev_infra_deployment_opensearch_index_template_job_manifest:
-  "{{ dev_infra_deployment_opensearch_artifacts_root }}/jobs/index-template-job.yaml"

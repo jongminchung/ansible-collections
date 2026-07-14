@@ -1,24 +1,33 @@
 ---
-- name: Add Helm repository {{ dev_infra_deployment_helm_repo_name }}
-  kubernetes.core.helm_repository:
-    binary_path: "{{ dev_infra_deployment_helm_bin }}"
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
-    name: "{{ dev_infra_deployment_helm_repo_name }}"
-    repo_url: "{{ dev_infra_deployment_helm_repo_url }}"
-    force_update: true
-  check_mode: false
-  vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+- name: Skip Helm repository update in check mode
+  ansible.builtin.debug:
+    msg: "Skipping Helm repository {{ dev_infra_deployment_helm_repo_name }} update in check mode."
+  when: ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
 
-- name: Update Helm repository {{ dev_infra_deployment_helm_repo_name }}
-  kubernetes.core.helm:
-    binary_path: "{{ dev_infra_deployment_helm_bin }}"
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
-    release_name: dev-infra-deployment-repo-cache
-    release_namespace: kube-system
-    release_state: absent
-    update_repo_cache: true
-  check_mode: false
-  changed_when: false
+- name: Configure Helm repository on the Ansible control node
+  block:
+    - name: Add Helm repository {{ dev_infra_deployment_helm_repo_name }}
+      kubernetes.core.helm_repository:
+        binary_path: "{{ dev_infra_deployment_helm_bin }}"
+        name: "{{ dev_infra_deployment_helm_repo_name }}"
+        repo_url: "{{ dev_infra_deployment_helm_repo_url }}"
+        force_update: true
+
+    - name: Update Helm repository {{ dev_infra_deployment_helm_repo_name }}
+      kubernetes.core.helm:
+        binary_path: "{{ dev_infra_deployment_helm_bin }}"
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+        release_name: dev-infra-deployment-repo-cache
+        release_namespace: kube-system
+        release_state: absent
+        update_repo_cache: true
+      changed_when: false
+  when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
   vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

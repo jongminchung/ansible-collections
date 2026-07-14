@@ -1,0 +1,31 @@
+---
+- name: Skip Kubernetes condition wait in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Skipping {{ dev_infra_deployment_wait_kind }}/{{ dev_infra_deployment_wait_name }}
+      {{ dev_infra_deployment_wait_condition_type }} wait in check mode.
+  when: ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Wait for Kubernetes resource condition from the Ansible control node
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: "{{ dev_infra_deployment_wait_api_version }}"
+    kind: "{{ dev_infra_deployment_wait_kind }}"
+    namespace: "{{ dev_infra_deployment_wait_namespace | default(omit) }}"
+    name: "{{ dev_infra_deployment_wait_name }}"
+    wait: true
+    wait_condition:
+      type: "{{ dev_infra_deployment_wait_condition_type }}"
+      status: "{{ dev_infra_deployment_wait_condition_status | default('True') }}"
+    wait_sleep: "{{ dev_infra_deployment_wait_sleep_seconds | default(5) }}"
+    wait_timeout: "{{ dev_infra_deployment_wait_timeout_seconds | default(300) }}"
+  changed_when: false
+  when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

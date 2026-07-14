@@ -1,6 +1,13 @@
 ---
-- name: Stage workload bootstrap artifacts
-  ansible.builtin.import_tasks: stage.yml
+- name: Resolve workload bootstrap definitions for deletion
+  ansible.builtin.set_fact:
+    dev_infra_deployment_workload_bootstrap_delete_definitions: >-
+      {{
+        (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/bootstrap-bin-configmap.yaml')
+         | from_yaml_all | reject('equalto', none) | list)
+        + (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/rbac.yaml')
+           | from_yaml_all | reject('equalto', none) | list)
+      }}
 
 - name: Delete workload bootstrap Jobs
   ansible.builtin.include_role:
@@ -17,11 +24,12 @@
     name: dev_infra.deployment.k8s_deployment
     tasks_from: delete_manifest
   vars:
-    dev_infra_deployment_delete_path: "{{ dev_infra_deployment_workload_bootstrap_artifacts_root }}/manifests"
+    dev_infra_deployment_delete_definitions:
+      "{{ dev_infra_deployment_workload_bootstrap_delete_definitions }}"
 
 - name: Delete application namespace
   kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     state: absent
     api_version: v1
     kind: Namespace

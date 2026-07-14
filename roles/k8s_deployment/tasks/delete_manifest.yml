@@ -1,33 +1,44 @@
-- name: Inspect Kubernetes manifest path {{ dev_infra_deployment_delete_path }}
-  ansible.builtin.stat:
-    path: "{{ dev_infra_deployment_delete_path }}"
-  register: dev_infra_deployment_delete_path_stat
+---
+- name: Delete Kubernetes definitions from the Ansible control node
+  block:
+    - name: Initialize Kubernetes definitions to delete
+      ansible.builtin.set_fact:
+        dev_infra_deployment_delete_definitions_resolved: >-
+          {{
+            (
+              dev_infra_deployment_delete_definitions
+              if (dev_infra_deployment_delete_definitions is sequence and
+                  dev_infra_deployment_delete_definitions is not mapping and
+                  dev_infra_deployment_delete_definitions is not string)
+              else [dev_infra_deployment_delete_definitions]
+            )
+            if (dev_infra_deployment_delete_definitions is defined)
+            else []
+          }}
 
-- name: Find Kubernetes manifest files under {{ dev_infra_deployment_delete_path }}
-  ansible.builtin.find:
-    paths: "{{ dev_infra_deployment_delete_path }}"
-    file_type: file
-    patterns:
-      - "*.yaml"
-      - "*.yml"
-  register: dev_infra_deployment_delete_manifest_find
-  when: dev_infra_deployment_delete_path_stat.stat.isdir | default(false)
+    - name: Resolve Kubernetes definition files to delete
+      ansible.builtin.set_fact:
+        dev_infra_deployment_delete_definitions_resolved: >-
+          {{
+            dev_infra_deployment_delete_definitions_resolved
+            + (lookup('ansible.builtin.file', item) | from_yaml_all | reject('equalto', none) | list)
+          }}
+      loop: "{{ dev_infra_deployment_delete_files | default([]) }}"
 
-- name: Resolve Kubernetes manifest files to delete
-  ansible.builtin.set_fact:
-    dev_infra_deployment_delete_manifest_files:
-      "{{ ([dev_infra_deployment_delete_path] if (dev_infra_deployment_delete_path_stat.stat.isreg |
-      default(false)) else (dev_infra_deployment_delete_manifest_find.files | default([]) |
-      map(attribute='path') | sort | list)) }}"
-
-- name: Delete Kubernetes manifest {{ dev_infra_deployment_delete_path }}
-  kubernetes.core.k8s:
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
-    state: absent
-    src: "{{ item }}"
-    wait: "{{ dev_infra_deployment_delete_wait | default(true) | bool }}"
-    wait_timeout:
-      "{{ dev_infra_deployment_delete_wait_timeout | default(dev_infra_deployment_wait_timeout_seconds) }}"
-  loop: "{{ dev_infra_deployment_delete_manifest_files }}"
+    - name: Delete Kubernetes definitions
+      kubernetes.core.k8s:
+        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+        state: absent
+        definition: "{{ item }}"
+        wait: "{{ dev_infra_deployment_delete_wait | default(true) | bool }}"
+        wait_timeout: >-
+          {{
+            dev_infra_deployment_delete_wait_timeout
+            | default(dev_infra_deployment_wait_timeout_seconds)
+          }}
+      loop: "{{ dev_infra_deployment_delete_definitions_resolved }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
   vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

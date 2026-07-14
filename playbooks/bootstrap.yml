@@ -1,66 +1,14 @@
 ---
-- name: Bootstrap Kubernetes platform
+- name: Bootstrap Kubernetes platform from the Ansible control node
   hosts: k8s_workload_mgr
-  become: true
+  become: false
   gather_facts: false
   pre_tasks:
-    - name: Prepare Kubernetes deployment prerequisites
+    - name: Validate Ansible control node and Kubernetes API access
       ansible.builtin.import_role:
         name: dev_infra.deployment.k8s_deployment
-        tasks_from: prerequisites
+        tasks_from: validate_control_node
       tags: [always]
   tasks:
-    - name: Bootstrap local-path storage
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.local_path_provisioner
-        tasks_from: bootstrap
-      tags: [local_path_provisioner, storage]
-
-    - name: Bootstrap cert-manager
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.cert_manager
-        tasks_from: bootstrap
-      tags: [cert_manager, tls]
-
-    - name: Bootstrap ACME DNS-01 issuer
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.acme_dns01_issuer
-        tasks_from: bootstrap
-      tags: [acme_dns01_issuer, tls]
-
-    - name: Bootstrap external TLS certificates
-      ansible.builtin.include_role:
-        name: dev_infra.deployment.external_tls_certificate
-        tasks_from: bootstrap
-      vars:
-        external_tls_certificate_label: "{{ item.label }}"
-        external_tls_certificate_request_tags: "{{ item.tags }}"
-        external_tls_certificate_namespace: "{{ item.namespace }}"
-        external_tls_certificate_name: "{{ item.name }}"
-        external_tls_certificate_secret_name: "{{ item.secret_name }}"
-        external_tls_certificate_issuer_name: "{{ item.issuer_name }}"
-        external_tls_certificate_dns_records: "{{ item.dns_records }}"
-        external_tls_certificate_dns_names: "{{ item.dns_names }}"
-        external_tls_certificate_manifest_path: "/tmp/{{ item.name }}-certificate.yaml"
-      loop: "{{ deployment_external_tls_certificates }}"
-      loop_control:
-        label: "{{ item.name }}"
-      tags: [external_tls_certificate, tls]
-
-    - name: Bootstrap APISIX Gateway
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.apisix_gateway
-        tasks_from: bootstrap
-      tags: [apisix_gateway, gateway_api]
-
-    - name: Bootstrap ExternalDNS
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.external_dns
-        tasks_from: bootstrap
-      tags: [external_dns, dns]
-
-    - name: Bootstrap Reloader
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.reloader
-        tasks_from: bootstrap
-      tags: [reloader]
+    - name: Converge Kubernetes platform roles
+      ansible.builtin.import_tasks: tasks/platform.yml

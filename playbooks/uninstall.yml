@@ -1,29 +1,34 @@
 ---
 - name: Uninstall Kubernetes application workloads
   hosts: k8s_workload_mgr
-  become: true
+  become: false
   gather_facts: false
   pre_tasks:
     - name: Prepare Kubernetes deployment prerequisites
       ansible.builtin.import_role:
         name: dev_infra.deployment.k8s_deployment
-        tasks_from: prerequisites
+        tasks_from: validate_control_node
       tags: [always]
   tasks:
-    - name: Uninstall OpenSearch Dashboard
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.opensearch_dashboard
-        tasks_from: uninstall
-      tags: [opensearch_dashboard, dashboard]
+    - name: Uninstall Kubernetes workloads from the Ansible control node
+      block:
+        - name: Uninstall OpenSearch Dashboard
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.opensearch_dashboard
+            tasks_from: uninstall
+          tags: [opensearch_dashboard, dashboard]
 
-    - name: Uninstall OpenSearch
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.opensearch
-        tasks_from: uninstall
-      tags: [opensearch]
+        - name: Uninstall OpenSearch
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.opensearch
+            tasks_from: uninstall
+          tags: [opensearch]
 
-    - name: Uninstall etcd
-      ansible.builtin.import_role:
-        name: dev_infra.deployment.etcd
-        tasks_from: uninstall
-      tags: [etcd]
+        - name: Uninstall etcd
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.etcd
+            tasks_from: uninstall
+          tags: [etcd]
+      delegate_to: localhost
+      become: false
+      run_once: true

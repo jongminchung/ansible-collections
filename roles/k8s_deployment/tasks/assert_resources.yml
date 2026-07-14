@@ -1,0 +1,20 @@
+---
+- name: Validate required Kubernetes resources from the Ansible control node
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: "{{ item.api_version | default('v1') }}"
+    kind: "{{ item.kind }}"
+    namespace: "{{ item.namespace | default(omit) }}"
+    name: "{{ item.name }}"
+  register: dev_infra_deployment_required_resource_results
+  failed_when: dev_infra_deployment_required_resource_results.resources | length == 0
+  changed_when: false
+  loop: "{{ dev_infra_deployment_required_resources }}"
+  loop_control:
+    label: "{{ item.kind }}/{{ item.name }}"
+  when: not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

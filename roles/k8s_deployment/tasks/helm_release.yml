@@ -2,15 +2,21 @@
 - name: Install or upgrade Helm release {{ dev_infra_deployment_helm_release_name }}
   kubernetes.core.helm:
     binary_path: "{{ dev_infra_deployment_helm_bin }}"
-    kubeconfig: "{{ dev_infra_deployment_kubeconfig }}"
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
     release_name: "{{ dev_infra_deployment_helm_release_name }}"
     chart_ref: "{{ dev_infra_deployment_helm_chart_ref }}"
-    chart_version: "{{ dev_infra_deployment_helm_chart_version }}"
+    chart_version: "{{ dev_infra_deployment_helm_chart_version | default(omit) }}"
     release_namespace: "{{ dev_infra_deployment_helm_namespace }}"
     create_namespace: true
     values_files: "{{ dev_infra_deployment_helm_values_files | default([]) }}"
+    release_values: "{{ dev_infra_deployment_helm_release_values | default({}) }}"
     set_values: "{{ dev_infra_deployment_helm_set_values | default([]) }}"
+    skip_crds: "{{ dev_infra_deployment_helm_skip_crds | default(false) | bool }}"
     wait: "{{ dev_infra_deployment_helm_wait | default(false) | bool }}"
     timeout: "{{ dev_infra_deployment_helm_timeout | default(dev_infra_deployment_wait_timeout) }}"
   vars:
-    ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  no_log: "{{ dev_infra_deployment_helm_no_log | default(false) | bool }}"
+  delegate_to: localhost
+  become: false
+  run_once: true

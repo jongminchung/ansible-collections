@@ -4,103 +4,54 @@
     that:
       - local_path_provisioner_version | length > 0
       - local_path_provisioner_manifest_url | length > 0
-      - local_path_provisioner_manifest_dir | length > 0
-      - local_path_provisioner_manifest_path | length > 0
-      - local_path_provisioner_kubectl_bin | length > 0
-      - local_path_provisioner_kubeconfig | length > 0
       - local_path_provisioner_namespace | length > 0
       - local_path_provisioner_deployment_name | length > 0
       - local_path_provisioner_storage_class | length > 0
-      - local_path_provisioner_wait_timeout | length > 0
     fail_msg: local-path provisioner role settings are invalid.
-  tags:
-    - always
-    - validate
-
-- name: Ensure local-path provisioner manifest directory exists
-  ansible.builtin.file:
-    path: "{{ local_path_provisioner_manifest_dir }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
-- name: Download local-path provisioner manifest
-  ansible.builtin.get_url:
-    url: "{{ local_path_provisioner_manifest_url }}"
-    dest: "{{ local_path_provisioner_manifest_path }}"
-    owner: root
-    group: root
-    mode: "0644"
+  tags: [always, validate]
 
 - name: Apply local-path provisioner manifest
-  ansible.builtin.command:
-    argv:
-      - "{{ local_path_provisioner_kubectl_bin }}"
-      - --kubeconfig
-      - "{{ local_path_provisioner_kubeconfig }}"
-      - apply
-      - -f
-      - "{{ local_path_provisioner_manifest_path }}"
-  register: local_path_provisioner_apply
-  changed_when: >-
-    ' created' in (' ' ~ local_path_provisioner_apply.stdout)
-    or ' configured' in (' ' ~ local_path_provisioner_apply.stdout)
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: apply_manifest
+  vars:
+    dev_infra_deployment_apply_url: "{{ local_path_provisioner_manifest_url }}"
+    dev_infra_deployment_apply_server_side: false
 
-- name: Read local-path default StorageClass annotation
-  ansible.builtin.command:
-    argv:
-      - "{{ local_path_provisioner_kubectl_bin }}"
-      - --kubeconfig
-      - "{{ local_path_provisioner_kubeconfig }}"
-      - get
-      - storageclass
-      - "{{ local_path_provisioner_storage_class }}"
-      - -o
-      - "jsonpath={.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class}"
-  register: local_path_provisioner_default_class_annotation
-  changed_when: false
-  when: local_path_provisioner_default_class | bool
+- name: Read local-path StorageClass
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: resource_info
+  vars:
+    dev_infra_deployment_resource_api_version: storage.k8s.io/v1
+    dev_infra_deployment_resource_kind: StorageClass
+    dev_infra_deployment_resource_name: "{{ local_path_provisioner_storage_class }}"
 
 - name: Configure local-path as default StorageClass
-  ansible.builtin.command:
-    argv:
-      - "{{ local_path_provisioner_kubectl_bin }}"
-      - --kubeconfig
-      - "{{ local_path_provisioner_kubeconfig }}"
-      - annotate
-      - storageclass
-      - "{{ local_path_provisioner_storage_class }}"
-      - storageclass.kubernetes.io/is-default-class=true
-      - --overwrite
-  register: local_path_provisioner_default_class_apply
-  changed_when: "'annotated' in local_path_provisioner_default_class_apply.stdout"
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: patch_resource
+  vars:
+    dev_infra_deployment_patch_api_version: storage.k8s.io/v1
+    dev_infra_deployment_patch_kind: StorageClass
+    dev_infra_deployment_patch_name: "{{ local_path_provisioner_storage_class }}"
+    dev_infra_deployment_patch_definition:
+      metadata:
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "true"
   when:
     - local_path_provisioner_default_class | bool
-    - local_path_provisioner_default_class_annotation.stdout != "true"
+    - dev_infra_deployment_resource_info_result.resources | length > 0
+    - >-
+      dev_infra_deployment_resource_info_result.resources[0].metadata.annotations[
+      'storageclass.kubernetes.io/is-default-class'] | default('false') != 'true'
 
 - name: Wait for local-path provisioner rollout
-  ansible.builtin.command:
-    argv:
-      - "{{ local_path_provisioner_kubectl_bin }}"
-      - --kubeconfig
-      - "{{ local_path_provisioner_kubeconfig }}"
-      - rollout
-      - status
-      - "deployment/{{ local_path_provisioner_deployment_name }}"
-      - --namespace
-      - "{{ local_path_provisioner_namespace }}"
-      - "--timeout={{ local_path_provisioner_wait_timeout }}"
-  changed_when: false
-  when: not ansible_check_mode
-
-- name: Verify local-path StorageClass exists
-  ansible.builtin.command:
-    argv:
-      - "{{ local_path_provisioner_kubectl_bin }}"
-      - --kubeconfig
-      - "{{ local_path_provisioner_kubeconfig }}"
-      - get
-      - storageclass
-      - "{{ local_path_provisioner_storage_class }}"
-  changed_when: false
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ local_path_provisioner_namespace }}"
+    dev_infra_deployment_rollout_resource: "deployment/{{ local_path_provisioner_deployment_name }}"
+    dev_infra_deployment_rollout_timeout_seconds:
+      "{{ local_path_provisioner_wait_timeout | regex_replace('s$', '') | int }}"

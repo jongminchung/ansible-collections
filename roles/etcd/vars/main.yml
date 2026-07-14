@@ -1,6 +1,2 @@
 ---
-dev_infra_deployment_etcd_artifacts_root: "{{ dev_infra_deployment_artifacts_root }}/etcd"
-dev_infra_deployment_etcd_values_files:
-  - "{{ dev_infra_deployment_etcd_artifacts_root }}/values.yaml"
-dev_infra_deployment_etcd_certificate_manifest:
-  "{{ dev_infra_deployment_etcd_artifacts_root }}/certificate.yaml"
+dev_infra_deployment_etcd_field_manager: etcd-resources

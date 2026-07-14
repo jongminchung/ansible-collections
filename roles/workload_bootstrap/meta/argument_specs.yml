@@ -14,6 +14,3 @@ argument_specs:
   verify:
     short_description: Verify workload bootstrap trust resources.
     options: {}
-  stage:
-    short_description: Stage workload bootstrap-owned static artifacts on the target host.
-    options: {}
