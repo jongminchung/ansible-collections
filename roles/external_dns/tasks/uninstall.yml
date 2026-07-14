@@ -1,0 +1,110 @@
+---
+- name: Validate ExternalDNS uninstall settings
+  ansible.builtin.assert:
+    that:
+      - external_dns_release_name | length > 0
+      - external_dns_namespace | length > 0
+      - external_dns_cloudflare_api_token | length > 0
+      - external_dns_cloudflare_zone_id | length > 0
+      - external_dns_txt_owner_id | length > 0
+      - external_dns_cloudflare_record_comment | length > 0
+    fail_msg: ExternalDNS uninstall settings are invalid.
+  no_log: true
+
+- name: Stop ExternalDNS before deleting owned records
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: helm_uninstall
+  vars:
+    dev_infra_deployment_helm_release_name: "{{ external_dns_release_name }}"
+    dev_infra_deployment_helm_namespace: "{{ external_dns_namespace }}"
+
+- name: Read Cloudflare DNS records managed by ExternalDNS
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{ external_dns_cloudflare_zone_id
+      }}/dns_records?per_page={{ external_dns_cloudflare_dns_records_per_page }}
+    validate_certs: "{{ external_dns_cloudflare_api_validate_certs | bool }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ external_dns_cloudflare_api_token }}"
+      Content-Type: application/json
+    return_content: true
+    status_code: 200
+  register: external_dns_uninstall_records_response
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Resolve ExternalDNS-owned Cloudflare records
+  ansible.builtin.set_fact:
+    external_dns_uninstall_owned_txt_records: >-
+      {{
+        external_dns_uninstall_records_response.json.result
+        | selectattr('type', 'equalto', 'TXT')
+        | selectattr('content', 'search', 'external-dns/owner=' ~ external_dns_txt_owner_id)
+        | list
+      }}
+    external_dns_uninstall_comment_owned_records: >-
+      {{
+        external_dns_uninstall_records_response.json.result
+        | selectattr('comment', 'defined')
+        | selectattr('comment', 'equalto', external_dns_cloudflare_record_comment)
+        | list
+      }}
+  no_log: true
+
+- name: Resolve ExternalDNS-owned record names and identifiers
+  ansible.builtin.set_fact:
+    external_dns_uninstall_owned_txt_names:
+      "{{ external_dns_uninstall_owned_txt_records | map(attribute='name') | unique | list }}"
+    external_dns_uninstall_owned_record_ids: >-
+      {{
+        (
+          (external_dns_uninstall_owned_txt_records | map(attribute='id') | list)
+          + (external_dns_uninstall_comment_owned_records | map(attribute='id') | list)
+        ) | unique | list
+      }}
+  no_log: true
+
+- name: Verify ExternalDNS endpoint record ownership
+  ansible.builtin.assert:
+    that:
+      - >-
+        external_dns_uninstall_records_response.json.result
+        | rejectattr('type', 'equalto', 'TXT')
+        | selectattr('name', 'in', external_dns_uninstall_owned_txt_names)
+        | selectattr('comment', 'defined')
+        | selectattr('comment', 'equalto', external_dns_cloudflare_record_comment)
+        | list | length
+        ==
+        external_dns_uninstall_records_response.json.result
+        | rejectattr('type', 'equalto', 'TXT')
+        | selectattr('name', 'in', external_dns_uninstall_owned_txt_names)
+        | list | length
+    fail_msg: ExternalDNS TXT ownership points to a Cloudflare endpoint record not owned by this Collection.
+  no_log: true
+
+- name: Delete ExternalDNS-owned Cloudflare records
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{ external_dns_cloudflare_zone_id
+      }}/dns_records/{{ item }}
+    validate_certs: "{{ external_dns_cloudflare_api_validate_certs | bool }}"
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ external_dns_cloudflare_api_token }}"
+      Content-Type: application/json
+    return_content: true
+    status_code: 200
+  changed_when: true
+  no_log: true
+  loop: "{{ external_dns_uninstall_owned_record_ids }}"
+  when: not ansible_check_mode
+
+- name: Delete ExternalDNS namespace
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: delete_namespace
+  vars:
+    dev_infra_deployment_delete_namespace: "{{ external_dns_namespace }}"

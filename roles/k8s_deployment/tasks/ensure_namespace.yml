@@ -1,4 +1,34 @@
 ---
+- name: Read namespace {{ dev_infra_deployment_target_namespace }} ownership
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ dev_infra_deployment_target_namespace }}"
+  register: dev_infra_deployment_target_namespace_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Refuse to adopt a namespace owned by another manager
+  ansible.builtin.assert:
+    that:
+      - >-
+        (dev_infra_deployment_target_namespace_labels.get('app.kubernetes.io/managed-by', '')
+         in ['', 'dev-infra-deployment'])
+      - >-
+        (dev_infra_deployment_target_namespace_labels.get('dev-infra.deployment/ownership', '')
+         in ['', 'exclusive'])
+    fail_msg: >-
+      Namespace/{{ dev_infra_deployment_target_namespace }} is already marked as owned by another
+      manager and cannot be adopted by dev-infra-deployment.
+  vars:
+    dev_infra_deployment_target_namespace_labels: >-
+      {{
+        (dev_infra_deployment_target_namespace_info.resources[0].metadata.labels | default({}))
+        if (dev_infra_deployment_target_namespace_info.resources | length > 0) else {}
+      }}
+
 - name: Ensure Kubernetes namespace {{ dev_infra_deployment_target_namespace }} exists
   kubernetes.core.k8s:
     kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
@@ -8,6 +38,9 @@
       kind: Namespace
       metadata:
         name: "{{ dev_infra_deployment_target_namespace }}"
+        labels:
+          app.kubernetes.io/managed-by: dev-infra-deployment
+          dev-infra.deployment/ownership: exclusive
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   delegate_to: localhost

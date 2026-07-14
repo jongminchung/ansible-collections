@@ -1,11 +1,14 @@
 ---
-- name: Converge Kubernetes platform and workloads
-  ansible.builtin.import_playbook: configure.yml
-
 - name: Kickstart stateful workloads
   hosts: k8s_workload_mgr
   become: false
   gather_facts: false
+  pre_tasks:
+    - name: Validate Ansible control node and Kubernetes API access
+      ansible.builtin.import_role:
+        name: dev_infra.deployment.k8s_deployment
+        tasks_from: validate_control_node
+      tags: [always]
   tasks:
     - name: Kickstart stateful workloads from the Ansible control node
       block:
@@ -14,12 +17,6 @@
             name: dev_infra.deployment.vault
             tasks_from: kickstart
           tags: [vault]
-
-        - name: Apply internal PKI after Vault is ready
-          ansible.builtin.import_role:
-            name: dev_infra.deployment.internal_pki_issuer
-            tasks_from: configure
-          tags: [internal_pki_issuer, pki, tls]
 
         - name: Kickstart OpenSearch post-deployment state
           ansible.builtin.import_role:

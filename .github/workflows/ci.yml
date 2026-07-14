@@ -25,19 +25,31 @@ jobs:
         run: |
           set -eu
           test ! -e playbooks/install.yml
-          for playbook in init bootstrap configure kickstart pull restart uninstall; do
+          test ! -e playbooks/bootstrap.yml
+          test ! -e roles/workload_bootstrap/tasks/bootstrap.yml
+          for playbook in init configure kickstart pull restart uninstall; do
             test -f "playbooks/${playbook}.yml"
           done
-          for role in vault etcd opensearch opensearch_dashboard; do
-            for lifecycle in configure pull restart uninstall; do
-              test -f "roles/${role}/tasks/${lifecycle}.yml"
-            done
+          test ! -e roles/internal_pki_issuer/tasks/verify.yml
+          test ! -e roles/k8s_deployment/tasks/prerequisites.yml
+          if rg -n 'dev_infra_deployment_confirm_full_uninstall' roles playbooks README.md; then
+            echo "Public uninstall must not require a separate confirmation variable." >&2
+            exit 1
+          fi
+          for role in local_path_provisioner cert_manager acme_dns01_issuer \
+            external_tls_certificate apisix_gateway external_dns reloader vault \
+            internal_pki_issuer workload_bootstrap etcd opensearch opensearch_dashboard; do
+            test -f "roles/${role}/tasks/uninstall.yml"
+          done
+          for role in local_path_provisioner cert_manager apisix_gateway external_dns \
+            reloader vault etcd opensearch opensearch_dashboard; do
+            test -f "roles/${role}/tasks/restart.yml"
           done
       - name: Syntax check public playbooks
         env:
           ANSIBLE_COLLECTIONS_PATH: .ansible/collections
         run: |
           set -eu
-          for playbook in init bootstrap configure kickstart pull restart uninstall; do
+          for playbook in init configure kickstart pull restart uninstall; do
             ansible-playbook -i tests/inventory/hosts.yml --syntax-check "dev_infra.deployment.${playbook}"
           done

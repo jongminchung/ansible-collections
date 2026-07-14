@@ -1,0 +1,104 @@
+---
+- name: Read PVCs backed by StorageClass/{{ dev_infra_deployment_reclaim_storage_class }}
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: PersistentVolumeClaim
+  register: dev_infra_deployment_reclaim_pvcs
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Read PVs backed by StorageClass/{{ dev_infra_deployment_reclaim_storage_class }}
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: PersistentVolume
+  register: dev_infra_deployment_reclaim_pvs
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Refuse to remove a StorageClass used by foreign namespaces
+  ansible.builtin.assert:
+    that:
+      - >-
+        dev_infra_deployment_reclaim_pvcs.resources
+        | selectattr('spec.storageClassName', 'defined')
+        | selectattr('spec.storageClassName', 'equalto', dev_infra_deployment_reclaim_storage_class)
+        | map(attribute='metadata.namespace')
+        | difference(dev_infra_deployment_reclaim_allowed_namespaces | default([]))
+        | length == 0
+    fail_msg: >-
+      StorageClass/{{ dev_infra_deployment_reclaim_storage_class }} is used outside the
+      Collection-owned namespaces.
+  when: dev_infra_deployment_reclaim_preflight_only | default(false) | bool
+
+- name: Wait for PVC reclaim from StorageClass/{{ dev_infra_deployment_reclaim_storage_class }}
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: PersistentVolumeClaim
+  register: dev_infra_deployment_reclaim_pvcs_wait
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+  retries: >-
+    {{
+      ((dev_infra_deployment_reclaim_timeout_seconds
+        | default(dev_infra_deployment_long_wait_timeout_seconds) | int)
+       / (dev_infra_deployment_pod_wait_sleep_seconds | int)) | round(0, 'ceil') | int
+    }}
+  delay: "{{ dev_infra_deployment_pod_wait_sleep_seconds }}"
+  until: >-
+    dev_infra_deployment_reclaim_pvcs_wait.resources
+    | selectattr('spec.storageClassName', 'defined')
+    | selectattr('spec.storageClassName', 'equalto', dev_infra_deployment_reclaim_storage_class)
+    | list | length == 0
+  when:
+    - not (dev_infra_deployment_reclaim_preflight_only | default(false) | bool)
+    - not ansible_check_mode
+
+- name: Wait for PV reclaim from StorageClass/{{ dev_infra_deployment_reclaim_storage_class }}
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: PersistentVolume
+  register: dev_infra_deployment_reclaim_pvs_wait
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+  retries: >-
+    {{
+      ((dev_infra_deployment_reclaim_timeout_seconds
+        | default(dev_infra_deployment_long_wait_timeout_seconds) | int)
+       / (dev_infra_deployment_pod_wait_sleep_seconds | int)) | round(0, 'ceil') | int
+    }}
+  delay: "{{ dev_infra_deployment_pod_wait_sleep_seconds }}"
+  until: >-
+    dev_infra_deployment_reclaim_pvs_wait.resources
+    | selectattr('spec.storageClassName', 'defined')
+    | selectattr('spec.storageClassName', 'equalto', dev_infra_deployment_reclaim_storage_class)
+    | list | length == 0
+  when:
+    - not (dev_infra_deployment_reclaim_preflight_only | default(false) | bool)
+    - not ansible_check_mode
+
+- name: Report storage reclaim plan in check mode
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        (dev_infra_deployment_reclaim_pvcs.resources
+         | selectattr('spec.storageClassName', 'defined')
+         | selectattr('spec.storageClassName', 'equalto', dev_infra_deployment_reclaim_storage_class)
+         | list | length)
+      }} PVCs and {{
+        (dev_infra_deployment_reclaim_pvs.resources
+         | selectattr('spec.storageClassName', 'defined')
+         | selectattr('spec.storageClassName', 'equalto', dev_infra_deployment_reclaim_storage_class)
+         | list | length)
+      }} PVs will be reclaimed before StorageClass/{{ dev_infra_deployment_reclaim_storage_class }}
+      is removed.
+  when:
+    - ansible_check_mode
+    - not (dev_infra_deployment_reclaim_preflight_only | default(false) | bool)

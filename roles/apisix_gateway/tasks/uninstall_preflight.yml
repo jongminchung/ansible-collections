@@ -1,0 +1,14 @@
+---
+- name: Verify Gateway API and APISIX CustomResourceDefinitions have no foreign consumers
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: delete_crds
+  vars:
+    dev_infra_deployment_delete_crd_names:
+      "{{ apisix_gateway_api_crd_names + apisix_gateway_chart_crd_names }}"
+    dev_infra_deployment_delete_crd_preflight_only: true
+    dev_infra_deployment_delete_crd_allowed_namespaces:
+      - "{{ dev_infra_deployment_namespace | default('gabiacloud-s3') }}"
+      - "{{ apisix_namespace }}"
+    dev_infra_deployment_delete_crd_allowed_cluster_names:
+      - "{{ apisix_gateway_class_name }}"

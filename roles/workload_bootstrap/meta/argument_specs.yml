@@ -1,11 +1,7 @@
 ---
 argument_specs:
-  bootstrap:
-    short_description: Bootstrap workload Kubernetes resources and root TLS trust jobs.
-    options: {}
   configure:
-    short_description:
-      Reconcile workload bootstrap trust bundle patching and certificate renewal jobs.
+    short_description: Configure workload bootstrap resources and reconcile root TLS trust.
     options: {}
   uninstall:
     short_description:

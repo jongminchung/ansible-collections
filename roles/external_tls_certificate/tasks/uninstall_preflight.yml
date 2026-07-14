@@ -1,0 +1,58 @@
+---
+- name: Resolve {{ external_tls_certificate_label }} uninstall preflight request state
+  ansible.builtin.set_fact:
+    external_tls_certificate_uninstall_preflight_requested: >-
+      {{
+        ((ansible_run_tags | default(['all']))
+        | intersect(external_tls_certificate_request_tags) | length) > 0
+      }}
+  tags: [always]
+
+- name: Validate {{ external_tls_certificate_label }} DNS ownership settings before mutation
+  ansible.builtin.assert:
+    that:
+      - external_tls_certificate_cloudflare_api_token | length > 0
+      - external_tls_certificate_cloudflare_zone_id | length > 0
+      - external_tls_certificate_dns_records | length > 0
+      - external_tls_certificate_dns_target | length > 0
+      - external_tls_certificate_cloudflare_record_comment | length > 0
+    fail_msg: "{{ external_tls_certificate_label }} uninstall settings are invalid."
+  no_log: true
+  when: external_tls_certificate_uninstall_preflight_requested | bool
+
+- name: Lookup {{ external_tls_certificate_label }} Cloudflare DNS records before mutation
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{ external_tls_certificate_cloudflare_zone_id
+      }}/dns_records?type={{ external_tls_certificate_dns_record_type }}&name={{ item | urlencode }}
+    validate_certs: "{{ external_tls_certificate_cloudflare_api_validate_certs | bool }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ external_tls_certificate_cloudflare_api_token }}"
+      Content-Type: application/json
+    return_content: true
+    status_code: 200
+  register: external_tls_certificate_uninstall_preflight_lookup
+  changed_when: false
+  check_mode: false
+  no_log: true
+  loop: "{{ external_tls_certificate_dns_records }}"
+  when: external_tls_certificate_uninstall_preflight_requested | bool
+
+- name: Verify {{ external_tls_certificate_label }} Cloudflare DNS ownership before mutation
+  ansible.builtin.assert:
+    that:
+      - item.json.success | default(false) | bool
+      - >-
+        item.json.result | selectattr('comment', 'defined')
+        | selectattr('comment', 'equalto', external_tls_certificate_cloudflare_record_comment)
+        | list | length == item.json.result | length
+      - >-
+        item.json.result | selectattr('content', 'equalto', external_tls_certificate_dns_target)
+        | list | length == item.json.result | length
+    fail_msg: >-
+      Cloudflare DNS record {{ item.item }} is not exclusively owned by
+      {{ external_tls_certificate_label }}.
+  no_log: true
+  loop: "{{ external_tls_certificate_uninstall_preflight_lookup.results | default([]) }}"
+  when: external_tls_certificate_uninstall_preflight_requested | bool

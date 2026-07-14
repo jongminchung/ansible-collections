@@ -1,3 +1,0 @@
----
-- name: Validate Ansible control node
-  ansible.builtin.import_tasks: validate_control_node.yml

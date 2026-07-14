@@ -10,3 +10,10 @@ cert_manager_helm_values:
   crds:
     enabled: true
 cert_manager_wait_timeout: 300s
+cert_manager_crd_names:
+  - certificaterequests.cert-manager.io
+  - certificates.cert-manager.io
+  - challenges.acme.cert-manager.io
+  - clusterissuers.cert-manager.io
+  - issuers.cert-manager.io
+  - orders.acme.cert-manager.io

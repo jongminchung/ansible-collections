@@ -1,0 +1,48 @@
+---
+- name: Read namespace {{ dev_infra_deployment_delete_namespace }} ownership
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ dev_infra_deployment_delete_namespace }}"
+  register: dev_infra_deployment_delete_namespace_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Verify namespace {{ dev_infra_deployment_delete_namespace }} is Collection-owned
+  ansible.builtin.assert:
+    that:
+      - >-
+        (dev_infra_deployment_delete_namespace_object.metadata.labels | default({})).get(
+          'app.kubernetes.io/managed-by', ''
+        ) == 'dev-infra-deployment'
+      - >-
+        (dev_infra_deployment_delete_namespace_object.metadata.labels | default({})).get(
+          'dev-infra.deployment/ownership', ''
+        ) == 'exclusive'
+    fail_msg: >-
+      Namespace/{{ dev_infra_deployment_delete_namespace }} exists without exclusive
+      dev-infra-deployment ownership. Run configure with this Collection before uninstall or remove
+      the foreign resources manually.
+  vars:
+    dev_infra_deployment_delete_namespace_object:
+      "{{ dev_infra_deployment_delete_namespace_info.resources | first }}"
+  when: dev_infra_deployment_delete_namespace_info.resources | length > 0
+
+- name: Delete Collection-owned namespace {{ dev_infra_deployment_delete_namespace }}
+  kubernetes.core.k8s:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ dev_infra_deployment_delete_namespace }}"
+    wait: true
+    wait_timeout: >-
+      {{
+        dev_infra_deployment_delete_namespace_wait_timeout
+        | default(dev_infra_deployment_long_wait_timeout_seconds)
+      }}
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  when: dev_infra_deployment_delete_namespace_info.resources | length > 0

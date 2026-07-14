@@ -27,12 +27,5 @@
     dev_infra_deployment_helm_wait: true
     dev_infra_deployment_helm_timeout: "{{ dev_infra_deployment_reloader_timeout }}"
 
-- name: Wait for Reloader rollout
-  ansible.builtin.include_role:
-    name: dev_infra.deployment.k8s_deployment
-    tasks_from: rollout_status
-  vars:
-    dev_infra_deployment_rollout_namespace: "{{ dev_infra_deployment_reloader_namespace }}"
-    dev_infra_deployment_rollout_resource: "deployment/{{ dev_infra_deployment_reloader_deployment_name }}"
-    dev_infra_deployment_rollout_timeout: "{{ dev_infra_deployment_reloader_timeout }}"
-    dev_infra_deployment_rollout_timeout_seconds: "{{ dev_infra_deployment_reloader_timeout_seconds }}"
+- name: Verify Reloader after bootstrap
+  ansible.builtin.import_tasks: verify.yml

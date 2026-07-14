@@ -1,0 +1,109 @@
+---
+- name: Read CustomResourceDefinitions selected for deletion
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: "{{ item }}"
+  loop: "{{ dev_infra_deployment_delete_crd_names }}"
+  register: dev_infra_deployment_delete_crd_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Verify CustomResourceDefinitions are Collection-owned
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.resources[0].metadata.labels | default({})).get(
+          'app.kubernetes.io/managed-by', ''
+        ) == 'dev-infra-deployment'
+      - >-
+        (item.resources[0].metadata.labels | default({})).get(
+          'dev-infra.deployment/ownership', ''
+        ) == 'exclusive'
+    fail_msg: >-
+      CustomResourceDefinition/{{ item.item }} exists without exclusive dev-infra-deployment
+      ownership and will not be removed.
+  loop: "{{ dev_infra_deployment_delete_crd_info.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.resources | length > 0
+
+- name: Read remaining instances for CustomResourceDefinitions selected for deletion
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: >-
+      {{
+        item.resources[0].spec.group ~ '/'
+        ~ (item.resources[0].spec.versions
+           | selectattr('served', 'equalto', true)
+           | map(attribute='name') | first)
+      }}
+    kind: "{{ item.resources[0].spec.names.kind }}"
+  loop: "{{ dev_infra_deployment_delete_crd_info.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: dev_infra_deployment_delete_crd_instances
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+  when: item.resources | length > 0
+
+- name: Refuse to manage CustomResourceDefinitions with foreign instances
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          item.item.resources[0].spec.scope == 'Namespaced'
+          and (
+            item.resources | default([])
+            | map(attribute='metadata.namespace')
+            | difference(dev_infra_deployment_delete_crd_allowed_namespaces | default([]))
+            | length == 0
+          )
+        ) or (
+          item.item.resources[0].spec.scope == 'Cluster'
+          and (
+            item.resources | default([])
+            | map(attribute='metadata.name')
+            | difference(dev_infra_deployment_delete_crd_allowed_cluster_names | default([]))
+            | length == 0
+          )
+        )
+    fail_msg: >-
+      CustomResourceDefinition/{{ item.item.item }} has resources outside the Collection-owned
+      namespaces or cluster-scoped names.
+  loop: "{{ dev_infra_deployment_delete_crd_instances.results }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+  when: not (item.skipped | default(false) | bool)
+
+- name: Refuse final CustomResourceDefinition deletion with remaining instances
+  ansible.builtin.assert:
+    that:
+      - item.resources | default([]) | length == 0
+    fail_msg: >-
+      CustomResourceDefinition/{{ item.item.item }} still has resources after Collection-owned
+      resources were removed.
+  loop: "{{ dev_infra_deployment_delete_crd_instances.results }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+  when:
+    - not (dev_infra_deployment_delete_crd_preflight_only | default(false) | bool)
+    - not ansible_check_mode
+    - not (item.skipped | default(false) | bool)
+
+- name: Delete unused CustomResourceDefinitions
+  kubernetes.core.k8s:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    state: absent
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: "{{ item }}"
+    wait: true
+    wait_timeout: "{{ dev_infra_deployment_long_wait_timeout_seconds }}"
+  loop: "{{ dev_infra_deployment_delete_crd_names }}"
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  when: not (dev_infra_deployment_delete_crd_preflight_only | default(false) | bool)

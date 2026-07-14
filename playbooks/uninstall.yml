@@ -1,17 +1,110 @@
 ---
-- name: Uninstall Kubernetes application workloads
+- name: Uninstall Kubernetes platform and application workloads
   hosts: k8s_workload_mgr
   become: false
   gather_facts: false
   pre_tasks:
-    - name: Prepare Kubernetes deployment prerequisites
+    - name: Validate Ansible control node and Kubernetes API access
       ansible.builtin.import_role:
         name: dev_infra.deployment.k8s_deployment
         tasks_from: validate_control_node
       tags: [always]
-  tasks:
-    - name: Uninstall Kubernetes workloads from the Ansible control node
+
+    - name: Validate full uninstall ownership before mutation
       block:
+        - name: Validate Collection-managed namespace ownership
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.k8s_deployment
+            tasks_from: validate_namespaces
+          vars:
+            dev_infra_deployment_validate_namespaces:
+              - "{{ external_dns_namespace | default('external-dns') }}"
+              - "{{ apisix_namespace | default('apisix') }}"
+              - "{{ dev_infra_deployment_reloader_namespace | default('reloader') }}"
+              - "{{ dev_infra_deployment_namespace | default('gabiacloud-s3') }}"
+              - "{{ dev_infra_deployment_vault_namespace | default('vault') }}"
+              - "{{ cert_manager_namespace | default('cert-manager') }}"
+              - "{{ local_path_provisioner_namespace | default('local-path-storage') }}"
+          tags: [always]
+
+        - name: Validate ExternalDNS ownership
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.external_dns
+            tasks_from: uninstall_preflight
+          tags: [external_dns, dns]
+
+        - name: Validate external TLS certificate ownership
+          ansible.builtin.include_role:
+            name: dev_infra.deployment.external_tls_certificate
+            tasks_from: uninstall_preflight
+          vars:
+            external_tls_certificate_label: "{{ item.label }}"
+            external_tls_certificate_request_tags: "{{ item.tags }}"
+            external_tls_certificate_namespace: "{{ item.namespace }}"
+            external_tls_certificate_name: "{{ item.name }}"
+            external_tls_certificate_secret_name: "{{ item.secret_name }}"
+            external_tls_certificate_issuer_name: "{{ item.issuer_name }}"
+            external_tls_certificate_dns_records: "{{ item.dns_records }}"
+            external_tls_certificate_dns_names: "{{ item.dns_names }}"
+          loop: "{{ deployment_external_tls_certificates }}"
+          loop_control:
+            label: "{{ item.name }}"
+          tags: [external_tls_certificate, tls]
+
+        - name: Validate APISIX and Gateway API ownership
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.apisix_gateway
+            tasks_from: uninstall_preflight
+          tags: [apisix_gateway, gateway_api]
+
+        - name: Validate cert-manager ownership
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.cert_manager
+            tasks_from: uninstall_preflight
+          tags: [cert_manager, tls]
+
+        - name: Validate local-path storage ownership
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.local_path_provisioner
+            tasks_from: uninstall_preflight
+          tags: [local_path_provisioner, storage]
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+  tasks:
+    - name: Remove Kubernetes platform and application workloads from the Ansible control node
+      block:
+        - name: Uninstall ExternalDNS and owned DNS records
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.external_dns
+            tasks_from: uninstall
+          tags: [external_dns, dns]
+
+        - name: Uninstall external TLS certificates and owned DNS records
+          ansible.builtin.include_role:
+            name: dev_infra.deployment.external_tls_certificate
+            tasks_from: uninstall
+          vars:
+            external_tls_certificate_label: "{{ item.label }}"
+            external_tls_certificate_request_tags: "{{ item.tags }}"
+            external_tls_certificate_namespace: "{{ item.namespace }}"
+            external_tls_certificate_name: "{{ item.name }}"
+            external_tls_certificate_secret_name: "{{ item.secret_name }}"
+            external_tls_certificate_issuer_name: "{{ item.issuer_name }}"
+            external_tls_certificate_dns_records: "{{ item.dns_records }}"
+            external_tls_certificate_dns_names: "{{ item.dns_names }}"
+          loop: "{{ deployment_external_tls_certificates }}"
+          loop_control:
+            label: "{{ item.name }}"
+          tags: [external_tls_certificate, tls]
+
+        - name: Uninstall Reloader
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.reloader
+            tasks_from: uninstall
+          tags: [reloader]
+
         - name: Uninstall OpenSearch Dashboard
           ansible.builtin.import_role:
             name: dev_infra.deployment.opensearch_dashboard
@@ -29,6 +122,48 @@
             name: dev_infra.deployment.etcd
             tasks_from: uninstall
           tags: [etcd]
+
+        - name: Uninstall workload bootstrap resources and application namespace
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.workload_bootstrap
+            tasks_from: uninstall
+          tags: [workload_bootstrap, pki]
+
+        - name: Uninstall internal PKI issuer
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.internal_pki_issuer
+            tasks_from: uninstall
+          tags: [internal_pki_issuer, pki, tls]
+
+        - name: Uninstall Vault and persistent data
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.vault
+            tasks_from: uninstall
+          tags: [vault]
+
+        - name: Uninstall APISIX Gateway
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.apisix_gateway
+            tasks_from: uninstall
+          tags: [apisix_gateway, gateway_api]
+
+        - name: Uninstall ACME DNS-01 issuer
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.acme_dns01_issuer
+            tasks_from: uninstall
+          tags: [acme_dns01_issuer, tls]
+
+        - name: Uninstall cert-manager
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.cert_manager
+            tasks_from: uninstall
+          tags: [cert_manager, tls]
+
+        - name: Uninstall local-path provisioner after persistent storage reclaim
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.local_path_provisioner
+            tasks_from: uninstall
+          tags: [local_path_provisioner, storage]
       delegate_to: localhost
       become: false
       run_once: true

@@ -2,6 +2,9 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
   name: {{ apisix_gateway_class_name }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
+    dev-infra.deployment/ownership: exclusive
 spec:
   controllerName: {{ apisix_controller_name }}
 ---
@@ -10,6 +13,8 @@ kind: Gateway
 metadata:
   name: {{ apisix_gateway_name }}
   namespace: {{ apisix_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
 {% if apisix_gateway_annotations_resolved | length > 0 %}
   annotations:
 {% for annotation_key, annotation_value in apisix_gateway_annotations_resolved.items() %}

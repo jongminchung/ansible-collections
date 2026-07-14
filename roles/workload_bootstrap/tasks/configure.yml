@@ -1,7 +1,4 @@
 ---
-- name: Bootstrap workload trust resources
-  ansible.builtin.import_tasks: bootstrap.yml
-
 - name: Apply workload bootstrap manifests
   ansible.builtin.import_tasks: apply.yml
 
@@ -57,3 +54,6 @@
       }}
     dev_infra_deployment_job_namespace: "{{ dev_infra_deployment_namespace }}"
     dev_infra_deployment_job_timeout_seconds: 2400
+
+- name: Verify workload bootstrap resources
+  ansible.builtin.import_tasks: verify.yml

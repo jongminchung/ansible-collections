@@ -1,0 +1,43 @@
+---
+- name: Read APISIX restart targets
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: apps/v1
+    kind: "{{ item.kind }}"
+    namespace: "{{ apisix_namespace }}"
+    name: "{{ item.name }}"
+  loop: "{{ apisix_gateway_restart_targets }}"
+  loop_control:
+    label: "{{ item.kind }}/{{ item.name }}"
+  register: apisix_gateway_restart_target_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Restart existing APISIX workloads
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_restart
+  vars:
+    dev_infra_deployment_restart_kind: "{{ item.item.kind }}"
+    dev_infra_deployment_restart_namespace: "{{ apisix_namespace }}"
+    dev_infra_deployment_restart_name: "{{ item.item.name }}"
+  loop: "{{ apisix_gateway_restart_target_info.results }}"
+  loop_control:
+    label: "{{ item.item.kind }}/{{ item.item.name }}"
+  when: item.resources | length > 0
+
+- name: Verify existing APISIX workloads after restart
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ apisix_namespace }}"
+    dev_infra_deployment_rollout_resource: >-
+      {{ ('deployment/' if item.item.kind == 'Deployment' else 'statefulset/') ~ item.item.name }}
+    dev_infra_deployment_rollout_timeout_seconds:
+      "{{ apisix_gateway_wait_timeout | regex_replace('s$', '') | int }}"
+  loop: "{{ apisix_gateway_restart_target_info.results }}"
+  loop_control:
+    label: "{{ item.item.kind }}/{{ item.item.name }}"
+  when: item.resources | length > 0

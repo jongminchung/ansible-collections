@@ -1,0 +1,15 @@
+---
+- name: Verify cert-manager CustomResourceDefinitions have no foreign consumers
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: delete_crds
+  vars:
+    dev_infra_deployment_delete_crd_names: "{{ cert_manager_crd_names }}"
+    dev_infra_deployment_delete_crd_preflight_only: true
+    dev_infra_deployment_delete_crd_allowed_namespaces:
+      - "{{ cert_manager_namespace }}"
+      - "{{ dev_infra_deployment_namespace | default('gabiacloud-s3') }}"
+      - "{{ apisix_namespace | default('apisix') }}"
+    dev_infra_deployment_delete_crd_allowed_cluster_names:
+      - "{{ acme_dns01_issuer_name | default('letsencrypt-cloudflare-dns01') }}"
+      - "{{ internal_pki_issuer_name | default('root-tls-ca') }}"

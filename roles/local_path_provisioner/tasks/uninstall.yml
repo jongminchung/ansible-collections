@@ -1,0 +1,25 @@
+---
+- name: Wait for local-path persistent storage reclaim
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_storage_reclaim
+  vars:
+    dev_infra_deployment_reclaim_storage_class: "{{ local_path_provisioner_storage_class }}"
+    dev_infra_deployment_reclaim_timeout_seconds:
+      "{{ local_path_provisioner_wait_timeout | regex_replace('s$', '') | int }}"
+
+- name: Delete local-path provisioner manifest
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: delete_manifest
+  vars:
+    dev_infra_deployment_delete_url: "{{ local_path_provisioner_manifest_url }}"
+    dev_infra_deployment_delete_excluded_kinds:
+      - Namespace
+
+- name: Delete local-path provisioner namespace
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: delete_namespace
+  vars:
+    dev_infra_deployment_delete_namespace: "{{ local_path_provisioner_namespace }}"

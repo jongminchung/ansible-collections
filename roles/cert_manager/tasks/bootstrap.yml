@@ -13,6 +13,13 @@
     fail_msg: cert-manager role settings are invalid.
   tags: [always, validate]
 
+- name: Ensure cert-manager namespace exists
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: ensure_namespace
+  vars:
+    dev_infra_deployment_target_namespace: "{{ cert_manager_namespace }}"
+
 - name: Apply cert-manager HelmChart
   ansible.builtin.include_role:
     name: dev_infra.deployment.k8s_deployment
@@ -47,3 +54,18 @@
     - cert-manager
     - cert-manager-cainjector
     - cert-manager-webhook
+
+- name: Mark cert-manager CustomResourceDefinitions as Collection-owned
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: patch_resource
+  vars:
+    dev_infra_deployment_patch_api_version: apiextensions.k8s.io/v1
+    dev_infra_deployment_patch_kind: CustomResourceDefinition
+    dev_infra_deployment_patch_name: "{{ item }}"
+    dev_infra_deployment_patch_definition:
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: dev-infra-deployment
+          dev-infra.deployment/ownership: exclusive
+  loop: "{{ cert_manager_crd_names }}"

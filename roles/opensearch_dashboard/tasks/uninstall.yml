@@ -1,10 +1,22 @@
 ---
+- name: Check Gateway API HTTPRoute CRD before Dashboard cleanup
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: httproutes.gateway.networking.k8s.io
+  register: dev_infra_deployment_gateway_httproute_crd
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
 - name: Resolve Dashboard definitions for deletion
   ansible.builtin.set_fact:
     dev_infra_deployment_dashboard_delete_local_definitions: >-
       {{
-        (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/httproute.yaml')
-         | from_yaml_all | reject('equalto', none) | list)
+        ((lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/httproute.yaml')
+          | from_yaml_all | reject('equalto', none) | list)
+         if (dev_infra_deployment_gateway_httproute_crd.resources | length > 0) else [])
         + (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/networkpolicy.yaml')
            | from_yaml_all | reject('equalto', none) | list)
         + (lookup('ansible.builtin.file', role_path ~ '/files/k8s/manifests/pdb.yaml')

@@ -1,5 +1,5 @@
 ---
-- name: Restart Kubernetes workloads
+- name: Restart Kubernetes platform and application workloads
   hosts: k8s_workload_mgr
   become: false
   gather_facts: false
@@ -10,8 +10,44 @@
         tasks_from: validate_control_node
       tags: [always]
   tasks:
-    - name: Restart Kubernetes workloads from the Ansible control node
+    - name: Restart Kubernetes platform and application workloads from the Ansible control node
       block:
+        - name: Restart local-path provisioner
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.local_path_provisioner
+            tasks_from: restart
+          tags: [local_path_provisioner, storage]
+
+        - name: Restart cert-manager
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.cert_manager
+            tasks_from: restart
+          tags: [cert_manager, tls]
+
+        - name: Restart APISIX Gateway
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.apisix_gateway
+            tasks_from: restart
+          tags: [apisix_gateway, gateway_api]
+
+        - name: Restart ExternalDNS
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.external_dns
+            tasks_from: restart
+          tags: [external_dns, dns]
+
+        - name: Restart Reloader
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.reloader
+            tasks_from: restart
+          tags: [reloader]
+
+        - name: Restart Vault
+          ansible.builtin.import_role:
+            name: dev_infra.deployment.vault
+            tasks_from: restart
+          tags: [vault]
+
         - name: Restart etcd
           ansible.builtin.import_role:
             name: dev_infra.deployment.etcd

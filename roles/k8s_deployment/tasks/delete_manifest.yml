@@ -25,6 +25,37 @@
           }}
       loop: "{{ dev_infra_deployment_delete_files | default([]) }}"
 
+    - name: Read Kubernetes definitions URL to delete
+      ansible.builtin.uri:
+        url: "{{ dev_infra_deployment_delete_url }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: dev_infra_deployment_delete_url_result
+      changed_when: false
+      check_mode: false
+      when: dev_infra_deployment_delete_url is defined
+
+    - name: Resolve Kubernetes definitions URL to delete
+      ansible.builtin.set_fact:
+        dev_infra_deployment_delete_definitions_resolved: >-
+          {{
+            dev_infra_deployment_delete_definitions_resolved
+            + (dev_infra_deployment_delete_url_result.content
+               | from_yaml_all | reject('equalto', none) | list)
+          }}
+      when: dev_infra_deployment_delete_url is defined
+
+    - name: Exclude Kubernetes definition kinds handled by dedicated deletion Interfaces
+      ansible.builtin.set_fact:
+        dev_infra_deployment_delete_definitions_resolved: >-
+          {{
+            dev_infra_deployment_delete_definitions_resolved
+            | rejectattr('kind', 'in', dev_infra_deployment_delete_excluded_kinds | default([]))
+            | list
+          }}
+      when: dev_infra_deployment_delete_excluded_kinds | default([]) | length > 0
+
     - name: Delete Kubernetes definitions
       kubernetes.core.k8s:
         kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"

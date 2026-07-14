@@ -44,8 +44,9 @@
     msg: >-
       Vault was deployed but is not initialized. Run vault operator init in a protected operator
       session, encrypt the generated root token and unseal key with ansible-vault encrypt_string,
-      update the inline inventory values, and rerun deployment:kickstart. Do not save plaintext
-      credentials in the repository, logs, or shell history.
+      update the inline inventory values, rerun deployment:configure to completion, and then run
+      deployment:kickstart. Do not save plaintext credentials in the repository, logs, or shell
+      history.
   when:
     - not ansible_check_mode
     - not (dev_infra_deployment_vault_status.initialized | bool)

@@ -1,6 +1,0 @@
----
-- name: Apply workload bootstrap manifests
-  ansible.builtin.import_tasks: apply.yml
-
-- name: Converge root TLS trust bundle
-  ansible.builtin.import_tasks: trust.yml

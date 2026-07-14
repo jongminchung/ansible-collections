@@ -18,6 +18,13 @@
     dev_infra_deployment_apply_url: "{{ local_path_provisioner_manifest_url }}"
     dev_infra_deployment_apply_server_side: false
 
+- name: Mark local-path provisioner namespace as Collection-owned
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: ensure_namespace
+  vars:
+    dev_infra_deployment_target_namespace: "{{ local_path_provisioner_namespace }}"
+
 - name: Read local-path StorageClass
   ansible.builtin.include_role:
     name: dev_infra.deployment.k8s_deployment
@@ -45,6 +52,21 @@
     - >-
       dev_infra_deployment_resource_info_result.resources[0].metadata.annotations[
       'storageclass.kubernetes.io/is-default-class'] | default('false') != 'true'
+
+- name: Mark local-path StorageClass as Collection-owned
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: patch_resource
+  vars:
+    dev_infra_deployment_patch_api_version: storage.k8s.io/v1
+    dev_infra_deployment_patch_kind: StorageClass
+    dev_infra_deployment_patch_name: "{{ local_path_provisioner_storage_class }}"
+    dev_infra_deployment_patch_definition:
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: dev-infra-deployment
+          dev-infra.deployment/ownership: exclusive
+  when: dev_infra_deployment_resource_info_result.resources | length > 0
 
 - name: Wait for local-path provisioner rollout
   ansible.builtin.include_role:

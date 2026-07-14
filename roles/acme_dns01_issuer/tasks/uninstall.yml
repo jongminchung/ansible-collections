@@ -1,0 +1,46 @@
+---
+- name: Check cert-manager ClusterIssuer CRD before ACME cleanup
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: clusterissuers.cert-manager.io
+  register: acme_dns01_issuer_crd_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Resolve ACME DNS-01 resources for deletion
+  ansible.builtin.set_fact:
+    acme_dns01_issuer_delete_definitions:
+      - apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: "{{ acme_dns01_issuer_name }}"
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: "{{ acme_dns01_issuer_secret_name }}"
+          namespace: "{{ acme_dns01_issuer_namespace }}"
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: "{{ acme_dns01_issuer_account_key_secret_name }}"
+          namespace: "{{ acme_dns01_issuer_namespace }}"
+
+- name: Exclude ACME DNS-01 ClusterIssuer when cert-manager is already absent
+  ansible.builtin.set_fact:
+    acme_dns01_issuer_delete_definitions: >-
+      {{
+        acme_dns01_issuer_delete_definitions
+        | rejectattr('kind', 'equalto', 'ClusterIssuer')
+        | list
+      }}
+  when: acme_dns01_issuer_crd_info.resources | length == 0
+
+- name: Delete ACME DNS-01 issuer resources
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: delete_manifest
+  vars:
+    dev_infra_deployment_delete_definitions: "{{ acme_dns01_issuer_delete_definitions }}"

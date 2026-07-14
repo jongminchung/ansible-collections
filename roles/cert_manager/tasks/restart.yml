@@ -1,0 +1,26 @@
+---
+- name: Restart cert-manager controllers
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_restart
+  vars:
+    dev_infra_deployment_restart_kind: Deployment
+    dev_infra_deployment_restart_namespace: "{{ cert_manager_namespace }}"
+    dev_infra_deployment_restart_name: "{{ item }}"
+  loop:
+    - cert-manager
+    - cert-manager-cainjector
+    - cert-manager-webhook
+- name: Verify cert-manager controllers after restart
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ cert_manager_namespace }}"
+    dev_infra_deployment_rollout_resource: "deployment/{{ item }}"
+    dev_infra_deployment_rollout_timeout_seconds:
+      "{{ cert_manager_wait_timeout | regex_replace('s$', '') | int }}"
+  loop:
+    - cert-manager
+    - cert-manager-cainjector
+    - cert-manager-webhook

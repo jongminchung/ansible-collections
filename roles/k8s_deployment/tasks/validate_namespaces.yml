@@ -1,0 +1,31 @@
+---
+- name: Read Collection-managed namespaces before mutation
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+  loop: "{{ dev_infra_deployment_validate_namespaces | unique }}"
+  register: dev_infra_deployment_validate_namespace_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+
+- name: Verify existing namespaces are exclusively Collection-owned
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.resources[0].metadata.labels | default({})).get(
+          'app.kubernetes.io/managed-by', ''
+        ) == 'dev-infra-deployment'
+      - >-
+        (item.resources[0].metadata.labels | default({})).get(
+          'dev-infra.deployment/ownership', ''
+        ) == 'exclusive'
+    fail_msg: >-
+      Namespace/{{ item.item }} exists without exclusive dev-infra-deployment ownership. Run
+      configure with this Collection before uninstall or remove the foreign resources manually.
+  loop: "{{ dev_infra_deployment_validate_namespace_info.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.resources | length > 0

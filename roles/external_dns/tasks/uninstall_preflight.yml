@@ -1,0 +1,56 @@
+---
+- name: Validate ExternalDNS uninstall settings before mutation
+  ansible.builtin.assert:
+    that:
+      - external_dns_cloudflare_api_token | length > 0
+      - external_dns_cloudflare_zone_id | length > 0
+      - external_dns_txt_owner_id | length > 0
+      - external_dns_cloudflare_record_comment | length > 0
+    fail_msg: ExternalDNS uninstall settings are invalid.
+  no_log: true
+
+- name: Read Cloudflare DNS records managed by ExternalDNS before mutation
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{ external_dns_cloudflare_zone_id
+      }}/dns_records?per_page={{ external_dns_cloudflare_dns_records_per_page }}
+    validate_certs: "{{ external_dns_cloudflare_api_validate_certs | bool }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ external_dns_cloudflare_api_token }}"
+      Content-Type: application/json
+    return_content: true
+    status_code: 200
+  register: external_dns_uninstall_preflight_response
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Resolve ExternalDNS ownership before mutation
+  ansible.builtin.set_fact:
+    external_dns_uninstall_preflight_txt_names: >-
+      {{
+        external_dns_uninstall_preflight_response.json.result
+        | selectattr('type', 'equalto', 'TXT')
+        | selectattr('content', 'search', 'external-dns/owner=' ~ external_dns_txt_owner_id)
+        | map(attribute='name') | unique | list
+      }}
+  no_log: true
+
+- name: Verify ExternalDNS endpoint ownership before mutation
+  ansible.builtin.assert:
+    that:
+      - >-
+        external_dns_uninstall_preflight_response.json.result
+        | rejectattr('type', 'equalto', 'TXT')
+        | selectattr('name', 'in', external_dns_uninstall_preflight_txt_names)
+        | selectattr('comment', 'defined')
+        | selectattr('comment', 'equalto', external_dns_cloudflare_record_comment)
+        | list | length
+        ==
+        external_dns_uninstall_preflight_response.json.result
+        | rejectattr('type', 'equalto', 'TXT')
+        | selectattr('name', 'in', external_dns_uninstall_preflight_txt_names)
+        | list | length
+    fail_msg: ExternalDNS TXT ownership points to a Cloudflare endpoint record not owned by this Collection.
+  no_log: true

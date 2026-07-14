@@ -1,0 +1,19 @@
+---
+- name: Restart local-path provisioner
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_restart
+  vars:
+    dev_infra_deployment_restart_kind: Deployment
+    dev_infra_deployment_restart_namespace: "{{ local_path_provisioner_namespace }}"
+    dev_infra_deployment_restart_name: "{{ local_path_provisioner_deployment_name }}"
+
+- name: Verify local-path provisioner after restart
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: rollout_status
+  vars:
+    dev_infra_deployment_rollout_namespace: "{{ local_path_provisioner_namespace }}"
+    dev_infra_deployment_rollout_resource: "deployment/{{ local_path_provisioner_deployment_name }}"
+    dev_infra_deployment_rollout_timeout_seconds:
+      "{{ local_path_provisioner_wait_timeout | regex_replace('s$', '') | int }}"

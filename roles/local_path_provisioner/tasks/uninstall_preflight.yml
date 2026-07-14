@@ -1,0 +1,12 @@
+---
+- name: Verify local-path storage is used only by Collection-owned namespaces
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: wait_storage_reclaim
+  vars:
+    dev_infra_deployment_reclaim_storage_class: "{{ local_path_provisioner_storage_class }}"
+    dev_infra_deployment_reclaim_preflight_only: true
+    dev_infra_deployment_reclaim_allowed_namespaces:
+      - "{{ dev_infra_deployment_namespace | default('gabiacloud-s3') }}"
+      - "{{ apisix_namespace | default('apisix') }}"
+      - "{{ dev_infra_deployment_vault_namespace | default('vault') }}"

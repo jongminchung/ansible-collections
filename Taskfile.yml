@@ -35,11 +35,33 @@ tasks:
         set -eu
 
         test ! -e playbooks/install.yml
+        test ! -e playbooks/bootstrap.yml
         test ! -d playbooks/migrations
         test ! -d roles/ldap
+        test ! -e roles/workload_bootstrap/tasks/bootstrap.yml
+        test ! -e roles/internal_pki_issuer/tasks/verify.yml
+        test ! -e roles/k8s_deployment/tasks/prerequisites.yml
         test -f roles/k8s_deployment/tasks/validate_control_node.yml
         test -f roles/k8s_deployment/tasks/apply_manifest.yml
         test -f roles/k8s_deployment/tasks/wait_condition.yml
+        test -f roles/k8s_deployment/tasks/delete_namespace.yml
+        test -f roles/k8s_deployment/tasks/delete_crds.yml
+        test -f roles/k8s_deployment/tasks/wait_storage_reclaim.yml
+
+        if rg -n 'dev_infra_deployment_confirm_full_uninstall' roles playbooks README.md; then
+          echo "Public uninstall must not require a separate confirmation variable." >&2
+          exit 1
+        fi
+
+        for role in local_path_provisioner cert_manager acme_dns01_issuer \
+          external_tls_certificate apisix_gateway external_dns reloader vault \
+          internal_pki_issuer workload_bootstrap etcd opensearch opensearch_dashboard; do
+          test -f "roles/$role/tasks/uninstall.yml"
+        done
+        for role in local_path_provisioner cert_manager apisix_gateway external_dns \
+          reloader vault etcd opensearch opensearch_dashboard; do
+          test -f "roles/$role/tasks/restart.yml"
+        done
 
         if find roles -path '*/tasks/stage.yml' -print -quit | grep -q .; then
           echo "Remote artifact staging tasks are not allowed." >&2
@@ -66,13 +88,48 @@ tasks:
           echo "Vault configure must not invoke kickstart." >&2
           exit 1
         fi
+        if rg -n 'import_tasks: bootstrap\.yml' roles/workload_bootstrap/tasks/configure.yml; then
+          echo "Workload configure must own apply and trust without a pass-through bootstrap." >&2
+          exit 1
+        fi
+        for task_file in apply trust; do
+          occurrence_count="$(rg -c "import_tasks: ${task_file}\\.yml" \
+            roles/workload_bootstrap/tasks/configure.yml || true)"
+          if [ "$occurrence_count" -ne 1 ]; then
+            echo "Workload configure must invoke $task_file exactly once." >&2
+            exit 1
+          fi
+        done
+        if rg -n 'ansible\.builtin\.import_playbook:' \
+          playbooks/init.yml \
+          playbooks/configure.yml \
+          playbooks/kickstart.yml \
+          playbooks/pull.yml \
+          playbooks/restart.yml \
+          playbooks/uninstall.yml; then
+          echo "Public Collection lifecycle Modules must not invoke one another." >&2
+          exit 1
+        fi
+        if rg -n 'import_playbook: .*configure|internal_pki_issuer' playbooks/kickstart.yml; then
+          echo "Kickstart must not invoke configure-owned convergence." >&2
+          exit 1
+        fi
+        for role_task in \
+          roles/reloader/tasks/bootstrap.yml \
+          roles/reloader/tasks/restart.yml \
+          roles/workload_bootstrap/tasks/configure.yml; do
+          if ! rg -n 'import_tasks: verify\.yml' "$role_task"; then
+            echo "$role_task must reuse its verification implementation." >&2
+            exit 1
+          fi
+        done
 
         ansible-galaxy collection verify \
           {{.COLLECTION_FQCN}} \
           -p {{.COLLECTIONS_PATH}} \
           --offline
 
-        for playbook in init bootstrap configure kickstart pull restart uninstall; do
+        for playbook in init configure kickstart pull restart uninstall; do
           test -f "playbooks/$playbook.yml"
           ANSIBLE_COLLECTIONS_PATH={{.COLLECTIONS_PATH}} \
             ansible-playbook \

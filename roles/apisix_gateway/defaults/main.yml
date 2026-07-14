@@ -19,6 +19,34 @@ apisix_gateway_service_external_ips:
   | default('')) | length > 0) else [] }}"
 apisix_gateway_annotations: {}
 apisix_gateway_wait_timeout: 180s
+apisix_gateway_restart_targets:
+  - kind: Deployment
+    name: apisix
+  - kind: Deployment
+    name: apisix-ingress-controller
+  - kind: StatefulSet
+    name: apisix-etcd
+apisix_gateway_api_crd_names:
+  - backendtlspolicies.gateway.networking.k8s.io
+  - gatewayclasses.gateway.networking.k8s.io
+  - gateways.gateway.networking.k8s.io
+  - grpcroutes.gateway.networking.k8s.io
+  - httproutes.gateway.networking.k8s.io
+  - listenersets.gateway.networking.k8s.io
+  - referencegrants.gateway.networking.k8s.io
+  - tlsroutes.gateway.networking.k8s.io
+apisix_gateway_chart_crd_names:
+  - apisixconsumers.apisix.apache.org
+  - apisixglobalrules.apisix.apache.org
+  - apisixpluginconfigs.apisix.apache.org
+  - apisixroutes.apisix.apache.org
+  - apisixtlses.apisix.apache.org
+  - apisixupstreams.apisix.apache.org
+  - backendtrafficpolicies.apisix.apache.org
+  - consumers.apisix.apache.org
+  - gatewayproxies.apisix.apache.org
+  - httproutepolicies.apisix.apache.org
+  - pluginconfigs.apisix.apache.org
 apisix_origin_tls_cert: ""
 apisix_origin_tls_key: ""
 apisix_gateway_tls_secret_name: k8s-mgr-origin-tls

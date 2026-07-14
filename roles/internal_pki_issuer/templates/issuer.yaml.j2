@@ -3,12 +3,16 @@ kind: ServiceAccount
 metadata:
   name: {{ internal_pki_issuer_service_account_name }}
   namespace: {{ internal_pki_issuer_cert_manager_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ internal_pki_issuer_service_account_name }}-token-request
   namespace: {{ internal_pki_issuer_cert_manager_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
 rules:
   - apiGroups:
       - ""
@@ -24,6 +28,8 @@ kind: RoleBinding
 metadata:
   name: {{ internal_pki_issuer_service_account_name }}-token-request
   namespace: {{ internal_pki_issuer_cert_manager_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
 subjects:
   - kind: ServiceAccount
     name: cert-manager
@@ -37,6 +43,9 @@ apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: {{ internal_pki_issuer_name }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
+    dev-infra.deployment/ownership: exclusive
 spec:
   vault:
     server: {{ internal_pki_issuer_vault_service_addr }}

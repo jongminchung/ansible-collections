@@ -13,10 +13,6 @@
     ansible_python_interpreter: "{{ dev_infra_deployment_python_interpreter }}"
   when: not ansible_check_mode
 
-- name: Bootstrap Vault after restart
-  ansible.builtin.import_tasks: bootstrap.yml
-  when: not ansible_check_mode
-
-- name: Verify Vault after restart
-  ansible.builtin.import_tasks: verify.yml
+- name: Kickstart Vault after restart
+  ansible.builtin.import_tasks: kickstart.yml
   when: not ansible_check_mode

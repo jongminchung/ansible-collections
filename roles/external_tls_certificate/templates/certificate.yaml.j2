@@ -3,6 +3,8 @@ kind: Certificate
 metadata:
   name: {{ external_tls_certificate_name }}
   namespace: {{ external_tls_certificate_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: dev-infra-deployment
 spec:
   secretName: {{ external_tls_certificate_secret_name }}
   issuerRef:
