@@ -12,6 +12,5 @@ internal_pki_issuer_vault_leaf_ttl: 720h
 internal_pki_issuer_vault_leaf_max_ttl: 2160h
 internal_pki_issuer_cert_manager_namespace: cert-manager
 internal_pki_issuer_service_account_name: root-tls-ca-issuer
-internal_pki_issuer_wait_timeout: "{{ dev_infra_deployment_wait_timeout | default('5m') }}"
-internal_pki_issuer_wait_timeout_seconds:
-  "{{ dev_infra_deployment_wait_timeout_seconds | default(300) }}"
+internal_pki_issuer_wait_timeout: 5m
+internal_pki_issuer_wait_timeout_seconds: 300

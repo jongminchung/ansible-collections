@@ -93,6 +93,11 @@ tasks:
           echo "Helm repository helpers must not refresh unrelated control-node repositories." >&2
           exit 1
         fi
+        if rg -n 'dev_infra_deployment_wait_timeout' \
+          roles/internal_pki_issuer/defaults/main.yml; then
+          echo "Internal PKI timeout defaults must not alias helper variables passed back at include boundaries." >&2
+          exit 1
+        fi
         if rg -n 'import_tasks: kickstart.yml' roles/vault/tasks/configure.yml; then
           echo "Vault configure must not invoke kickstart." >&2
           exit 1
