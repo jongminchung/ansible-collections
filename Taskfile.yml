@@ -37,6 +37,35 @@ tasks:
         test ! -e playbooks/install.yml
         test ! -d playbooks/migrations
         test ! -d roles/ldap
+        test -f roles/k8s_deployment/tasks/validate_control_node.yml
+        test -f roles/k8s_deployment/tasks/apply_manifest.yml
+        test -f roles/k8s_deployment/tasks/wait_condition.yml
+
+        if find roles -path '*/tasks/stage.yml' -print -quit | grep -q .; then
+          echo "Remote artifact staging tasks are not allowed." >&2
+          exit 1
+        fi
+        if rg -n \
+          'k8s_kubectl_bin|/var/lib/rancher/rke2/bin/kubectl|/usr/local/bin/helm|ansible\.builtin\.(apt|pip):' \
+          roles/local_path_provisioner \
+          roles/cert_manager \
+          roles/acme_dns01_issuer \
+          roles/external_tls_certificate \
+          roles/external_dns \
+          roles/apisix_gateway; then
+          echo "Platform roles must use k8s_deployment control-node helpers." >&2
+          exit 1
+        fi
+        if rg -n \
+          'dev_infra_deployment_(python_venv|python_packages|staging_root|artifacts_root|kubectl_bin)' \
+          roles playbooks; then
+          echo "Managed-node deployment tooling variables are not allowed." >&2
+          exit 1
+        fi
+        if rg -n 'import_tasks: kickstart.yml' roles/vault/tasks/configure.yml; then
+          echo "Vault configure must not invoke kickstart." >&2
+          exit 1
+        fi
 
         ansible-galaxy collection verify \
           {{.COLLECTION_FQCN}} \

@@ -16,11 +16,19 @@
 ## 구조 규칙
 
 - `k8s_deployment`은 Helm, Kubernetes manifest, wait, RKE2 image import 공통 동작만 소유한다.
+- Kubernetes와 Helm API 작업은 Ansible control node에서 `delegate_to: localhost`, `become: false`,
+  `run_once: true`, `ansible_playbook_python`으로 실행한다.
+- managed node에 Collection 전용 Helm, kubectl, Python venv를 설치하지 않는다. kubectl은 control
+  node 필수 의존성도 아니다.
+- 서비스 Role은 manifest와 Helm values를 memory에서 전달하며 원격 artifact staging을 추가하지
+  않는다.
 - 플랫폼과 워크로드 Role은 public Playbook에서 FQCN과 `tasks_from`으로 직접 호출한다.
 - `devinfra_*` 전달용 wrapper Role을 추가하지 않는다.
 - 설치와 갱신은 `configure`에 통합하며 `install` lifecycle을 추가하지 않는다.
 - public lifecycle은 `init`, `bootstrap`, `configure`, `kickstart`, `pull`, `restart`,
   `uninstall`이다.
+- fresh Vault initialization은 수동 보안 경계다. Collection이 root token 또는 unseal key를 생성,
+  출력, 저장하거나 inventory를 수정하지 않는다.
 
 ## 검증
 

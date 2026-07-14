@@ -13,6 +13,23 @@ Collection입니다.
 서비스 Role은 public Playbook에서 직접 호출되며 전달만 하는 wrapper Role은 사용하지 않습니다. 비밀
 값과 인벤토리는 소비 저장소가 inline Ansible Vault 변수로 제공합니다.
 
+## Ansible control node
+
+Kubernetes와 Helm API 작업은 `dev-infra`에서 `ansible-playbook`을 실행하는 Ansible control
+node에서 수행합니다. Kubernetes helper는 `delegate_to: localhost`, `become: false`, `run_once:
+true`를 사용하고 `ansible_playbook_python`으로 `kubernetes.core` module을 실행합니다. RKE2 managed
+node에는 Collection 전용 Helm, kubectl, Python venv를 설치하지 않습니다. `pull`의 RKE2 image
+import와 `crictl` 검증만 managed node에서 실행합니다.
+
+Control node에는 Ansible, Helm, Git, jq와 Python `kubernetes`, `yaml`, `jsonpatch` module이 미리
+설치되어 있어야 합니다. Collection은 이를 설치하지 않고 `init`에서 검증합니다. kubectl은 필수
+의존성이 아닙니다.
+
+Vault fresh install은 자동 초기화하지 않습니다. `configure`가 uninitialized 상태에서 중단하면
+보호된 운영 세션에서 `vault operator init`을 수행하고 생성 값을 inline Ansible Vault 변수로 갱신한
+뒤 `kickstart`를 다시 실행합니다. root token과 unseal key를 평문 파일, 로그 또는 shell history에
+남기지 않습니다.
+
 ## 검증과 0.0.1 릴리스
 
 ```bash
