@@ -88,6 +88,11 @@ tasks:
           echo "Jinja expressions in YAML mapping keys are not rendered; build a computed mapping instead." >&2
           exit 1
         fi
+        if rg -n '^[[:space:]]*update_repo_cache:[[:space:]]*true' \
+          roles/k8s_deployment/tasks/helm_repo.yml; then
+          echo "Helm repository helpers must not refresh unrelated control-node repositories." >&2
+          exit 1
+        fi
         if rg -n 'import_tasks: kickstart.yml' roles/vault/tasks/configure.yml; then
           echo "Vault configure must not invoke kickstart." >&2
           exit 1

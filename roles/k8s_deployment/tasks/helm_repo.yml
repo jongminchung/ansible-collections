@@ -17,13 +17,12 @@
         force_update: true
 
     - name: Update Helm repository {{ dev_infra_deployment_helm_repo_name }}
-      kubernetes.core.helm:
-        binary_path: "{{ dev_infra_deployment_helm_bin }}"
-        kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
-        release_name: dev-infra-deployment-repo-cache
-        release_namespace: kube-system
-        release_state: absent
-        update_repo_cache: true
+      ansible.builtin.command:
+        argv:
+          - "{{ dev_infra_deployment_helm_bin }}"
+          - repo
+          - update
+          - "{{ dev_infra_deployment_helm_repo_name }}"
       changed_when: false
   when: not ansible_check_mode
   delegate_to: localhost
