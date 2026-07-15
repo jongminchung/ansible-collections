@@ -1,0 +1,68 @@
+---
+- name: Read existing NFS StorageClass before Helm upgrade
+  ansible.builtin.include_role:
+    name: dev_infra.deployment.k8s_deployment
+    tasks_from: resource_info
+  vars:
+    dev_infra_deployment_resource_api_version: storage.k8s.io/v1
+    dev_infra_deployment_resource_kind: StorageClass
+    dev_infra_deployment_resource_name: "{{ dev_infra_deployment_storage_class }}"
+
+- name: Resolve whether immutable NFS StorageClass settings changed
+  ansible.builtin.set_fact:
+    csi_driver_nfs_storage_class_requires_replacement: >-
+      {{
+        dev_infra_deployment_resource_info_result.resources | length == 1
+        and (
+          csi_driver_nfs_existing_storage_class.provisioner
+            | default('') != csi_driver_nfs_driver_name
+          or csi_driver_nfs_existing_storage_class.parameters
+            | default({}) != csi_driver_nfs_helm_values.storageClass.parameters
+          or csi_driver_nfs_existing_storage_class.reclaimPolicy
+            | default('') != csi_driver_nfs_reclaim_policy
+          or csi_driver_nfs_existing_storage_class.volumeBindingMode
+            | default('') != 'Immediate'
+          or not (csi_driver_nfs_existing_storage_class.allowVolumeExpansion
+            | default(false) | bool)
+          or csi_driver_nfs_existing_storage_class.mountOptions
+            | default([]) != csi_driver_nfs_mount_options
+        )
+      }}
+  vars:
+    csi_driver_nfs_existing_storage_class: >-
+      {{ (dev_infra_deployment_resource_info_result.resources | first) | default({}, true) }}
+
+- name: Verify ownership before replacing immutable NFS StorageClass
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (csi_driver_nfs_storage_class_requires_replacement | bool)
+        or (
+          csi_driver_nfs_existing_storage_class.metadata.labels[
+            'dev-infra.deployment/ownership'] | default('') == 'exclusive'
+          and
+          csi_driver_nfs_existing_storage_class.metadata.annotations[
+            'meta.helm.sh/release-name'] | default('') == csi_driver_nfs_release_name
+          and
+          csi_driver_nfs_existing_storage_class.metadata.annotations[
+            'meta.helm.sh/release-namespace'] | default('') == csi_driver_nfs_namespace
+        )
+    fail_msg: >-
+      StorageClass/{{ dev_infra_deployment_storage_class }} has immutable setting changes but is
+      not owned by this NFS CSI release.
+  vars:
+    csi_driver_nfs_existing_storage_class: >-
+      {{ (dev_infra_deployment_resource_info_result.resources | first) | default({}, true) }}
+
+- name: Delete owned NFS StorageClass with changed immutable settings
+  kubernetes.core.k8s:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    state: absent
+    api_version: storage.k8s.io/v1
+    kind: StorageClass
+    name: "{{ dev_infra_deployment_storage_class }}"
+    wait: true
+    wait_timeout: "{{ csi_driver_nfs_timeout_seconds }}"
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  when: csi_driver_nfs_storage_class_requires_replacement | bool
