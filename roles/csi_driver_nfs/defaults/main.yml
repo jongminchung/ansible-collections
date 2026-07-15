@@ -39,6 +39,7 @@ csi_driver_nfs_helm_values:
   controller:
     replicas: 1
     runOnControlPlane: true
+    enableSnapshotter: false
     defaultOnDeletePolicy: "{{ csi_driver_nfs_on_delete }}"
   externalSnapshotter:
     enabled: false

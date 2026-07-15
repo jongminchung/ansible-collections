@@ -22,6 +22,10 @@
       - csi_driver_nfs_driver_name == 'nfs.csi.k8s.io'
       - csi_driver_nfs_kubelet_dir == '/var/lib/kubelet'
       - csi_driver_nfs_helm_values is mapping
+      - csi_driver_nfs_helm_values.controller.replicas | int == 1
+      - csi_driver_nfs_helm_values.controller.runOnControlPlane | bool
+      - not (csi_driver_nfs_helm_values.controller.enableSnapshotter | bool)
+      - not (csi_driver_nfs_helm_values.externalSnapshotter.enabled | bool)
     fail_msg: NFS CSI driver role settings are invalid.
   tags: [always, validate]
 

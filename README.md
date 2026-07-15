@@ -30,7 +30,8 @@ CR이나 NFS CSI StorageClass를 사용하는 foreign PVC가 발견되면 전체
 
 `csi_driver_nfs`는 공식 `kubernetes-csi/csi-driver-nfs` Helm chart `4.13.2`를 전용
 `nfs-csi` namespace에 설치합니다. NFS server 자체는 관리하지 않으며 소비 인벤토리가 준비된
-server와 export를 전달해야 합니다.
+server와 export를 전달해야 합니다. controller replica는 1이며 control-plane 실행을 허용하고
+snapshot sidecar와 외부 snapshot controller는 모두 비활성화합니다.
 
 ```yaml
 dev_infra_deployment_storage_class: nfs-csi
