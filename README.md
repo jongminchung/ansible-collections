@@ -48,6 +48,8 @@ csi_driver_nfs_default_class: true
 configure는 controller Deployment, node DaemonSet, StorageClass와 CSIDriver 소유권을 검증한 뒤
 non-root smoke Job으로 PVC 쓰기·읽기를 확인합니다. 같은 PVC를 다시 생성해 이전 marker가 남지
 않았는지도 검사하므로 NFS export의 동적 하위 디렉터리 생성 권한과 `Delete` 동작이 모두 필요합니다.
+StorageClass는 전용 ownership label과 Helm release annotation을, CSIDriver는 Helm release
+annotation을 소유권 경계로 사용합니다.
 NFS CSI subdirectory volume은 PVC 요청 용량만으로 server-side quota를 강제하지 않습니다.
 
 ## Tag와 limit

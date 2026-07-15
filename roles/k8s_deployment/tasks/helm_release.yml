@@ -11,7 +11,6 @@
     values_files: "{{ dev_infra_deployment_helm_values_files | default([]) }}"
     release_values: "{{ dev_infra_deployment_helm_release_values | default({}) }}"
     set_values: "{{ dev_infra_deployment_helm_set_values | default([]) }}"
-    post_renderer: "{{ dev_infra_deployment_helm_post_renderer | default(omit) }}"
     skip_crds: "{{ dev_infra_deployment_helm_skip_crds | default(false) | bool }}"
     wait: "{{ dev_infra_deployment_helm_wait | default(false) | bool }}"
     timeout: "{{ dev_infra_deployment_helm_timeout | default(dev_infra_deployment_wait_timeout) }}"

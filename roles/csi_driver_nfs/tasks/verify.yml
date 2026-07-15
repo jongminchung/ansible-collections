@@ -50,6 +50,12 @@
         csi_driver_nfs_storage_class.metadata.labels['dev-infra.deployment/ownership']
         | default('') == 'exclusive'
       - >-
+        csi_driver_nfs_storage_class.metadata.annotations['meta.helm.sh/release-name']
+        | default('') == csi_driver_nfs_release_name
+      - >-
+        csi_driver_nfs_storage_class.metadata.annotations['meta.helm.sh/release-namespace']
+        | default('') == csi_driver_nfs_namespace
+      - >-
         csi_driver_nfs_storage_class.metadata.annotations[
           'storageclass.kubernetes.io/is-default-class'] | default('false')
         == (csi_driver_nfs_default_class | bool | ternary('true', 'false'))
@@ -74,8 +80,11 @@
     that:
       - dev_infra_deployment_resource_info_result.resources | length == 1
       - >-
-        csi_driver_nfs_driver.metadata.labels['dev-infra.deployment/ownership']
-        | default('') == 'exclusive'
+        csi_driver_nfs_driver.metadata.annotations['meta.helm.sh/release-name']
+        | default('') == csi_driver_nfs_release_name
+      - >-
+        csi_driver_nfs_driver.metadata.annotations['meta.helm.sh/release-namespace']
+        | default('') == csi_driver_nfs_namespace
     fail_msg: NFS CSIDriver is missing or is not Collection-owned.
   vars:
     csi_driver_nfs_driver:

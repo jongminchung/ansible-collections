@@ -21,7 +21,6 @@
       - csi_driver_nfs_chart_version | string | length > 0
       - csi_driver_nfs_driver_name == 'nfs.csi.k8s.io'
       - csi_driver_nfs_kubelet_dir == '/var/lib/kubelet'
-      - csi_driver_nfs_post_renderer_path | length > 0
       - csi_driver_nfs_helm_values is mapping
       - csi_driver_nfs_helm_values.controller.replicas | int == 1
       - csi_driver_nfs_helm_values.controller.runOnControlPlane | bool
@@ -55,7 +54,6 @@
     dev_infra_deployment_helm_chart_version: "{{ csi_driver_nfs_chart_version }}"
     dev_infra_deployment_helm_namespace: "{{ csi_driver_nfs_namespace }}"
     dev_infra_deployment_helm_release_values: "{{ csi_driver_nfs_helm_values }}"
-    dev_infra_deployment_helm_post_renderer: "{{ csi_driver_nfs_post_renderer_path }}"
     dev_infra_deployment_helm_wait: true
     dev_infra_deployment_helm_timeout: "{{ csi_driver_nfs_timeout }}"
 

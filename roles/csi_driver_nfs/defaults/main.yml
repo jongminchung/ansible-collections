@@ -20,8 +20,6 @@ csi_driver_nfs_driver_name: nfs.csi.k8s.io
 csi_driver_nfs_kubelet_dir: /var/lib/kubelet
 csi_driver_nfs_controller_name: csi-nfs-controller
 csi_driver_nfs_node_name: csi-nfs-node
-csi_driver_nfs_post_renderer_path:
-  "{{ (playbook_dir | dirname) ~ '/roles/csi_driver_nfs/files/post_renderer' }}"
 csi_driver_nfs_timeout: 5m
 csi_driver_nfs_timeout_seconds: 300
 csi_driver_nfs_smoke_pvc_name: csi-driver-nfs-smoke

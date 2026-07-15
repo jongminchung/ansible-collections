@@ -16,6 +16,12 @@
         or (
           csi_driver_nfs_storage_class.metadata.labels['dev-infra.deployment/ownership']
           | default('') == 'exclusive'
+          and
+          csi_driver_nfs_storage_class.metadata.annotations['meta.helm.sh/release-name']
+          | default('') == csi_driver_nfs_release_name
+          and
+          csi_driver_nfs_storage_class.metadata.annotations['meta.helm.sh/release-namespace']
+          | default('') == csi_driver_nfs_namespace
         )
     fail_msg: StorageClass/{{ dev_infra_deployment_storage_class }} is not Collection-owned.
   vars:
@@ -37,8 +43,11 @@
       - >-
         dev_infra_deployment_resource_info_result.resources | length == 0
         or (
-          csi_driver_nfs_driver.metadata.labels['dev-infra.deployment/ownership']
-          | default('') == 'exclusive'
+          csi_driver_nfs_driver.metadata.annotations['meta.helm.sh/release-name']
+          | default('') == csi_driver_nfs_release_name
+          and
+          csi_driver_nfs_driver.metadata.annotations['meta.helm.sh/release-namespace']
+          | default('') == csi_driver_nfs_namespace
         )
     fail_msg: CSIDriver/{{ csi_driver_nfs_driver_name }} is not Collection-owned.
   vars:

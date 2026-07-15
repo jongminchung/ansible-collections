@@ -49,17 +49,9 @@ tasks:
         test -f roles/k8s_deployment/tasks/wait_storage_reclaim.yml
         test -z "$(find roles/local_path_provisioner -type f -print -quit 2>/dev/null)"
         test -f roles/csi_driver_nfs/tasks/smoke_test.yml
-        test -x roles/csi_driver_nfs/files/post_renderer
         rg -q '^    enableSnapshotter: false$' roles/csi_driver_nfs/defaults/main.yml
         rg -q -U '^  externalSnapshotter:\n    enabled: false$' \
           roles/csi_driver_nfs/defaults/main.yml
-        printf '%s\n' \
-          'apiVersion: storage.k8s.io/v1' \
-          'kind: CSIDriver' \
-          'metadata:' \
-          '  name: nfs.csi.k8s.io' \
-          | roles/csi_driver_nfs/files/post_renderer \
-          | grep -q 'dev-infra.deployment/ownership: exclusive'
 
         if rg -n 'local[_-]path|local path' roles playbooks README.md; then
           echo "Local-path storage references are not allowed after the NFS CSI transition." >&2
