@@ -39,7 +39,7 @@ csi_driver_nfs_server: 10.25.140.6
 csi_driver_nfs_share: /k8s_data
 csi_driver_nfs_sub_dir: '${pvc.metadata.namespace}/${pvc.metadata.name}'
 csi_driver_nfs_mount_permissions: "0777"
-csi_driver_nfs_mount_options: [nfsvers=4.1, hard]
+csi_driver_nfs_mount_options: [nfsvers=3, hard, nolock]
 csi_driver_nfs_reclaim_policy: Delete
 csi_driver_nfs_on_delete: delete
 csi_driver_nfs_default_class: true
@@ -48,6 +48,8 @@ csi_driver_nfs_default_class: true
 configure는 controller Deployment, node DaemonSet, StorageClass와 CSIDriver 소유권을 검증한 뒤
 non-root smoke Job으로 PVC 쓰기·읽기를 확인합니다. 같은 PVC를 다시 생성해 이전 marker가 남지
 않았는지도 검사하므로 NFS export의 동적 하위 디렉터리 생성 권한과 `Delete` 동작이 모두 필요합니다.
+역할은 NFSv3를 사용하며 controller 컨테이너에서 `rpc.statd` 없이 mount할 수 있도록 `hard,nolock`
+옵션을 요구합니다.
 StorageClass는 전용 ownership label과 Helm release annotation을, CSIDriver는 Helm release
 annotation을 소유권 경계로 사용합니다.
 NFS CSI subdirectory volume은 PVC 요청 용량만으로 server-side quota를 강제하지 않습니다.

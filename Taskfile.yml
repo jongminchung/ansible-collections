@@ -49,6 +49,8 @@ tasks:
         test -f roles/k8s_deployment/tasks/wait_storage_reclaim.yml
         test -z "$(find roles/local_path_provisioner -type f -print -quit 2>/dev/null)"
         test -f roles/csi_driver_nfs/tasks/smoke_test.yml
+        rg -q '^  - nfsvers=3$' roles/csi_driver_nfs/defaults/main.yml
+        rg -q '^  - nolock$' roles/csi_driver_nfs/defaults/main.yml
         rg -q '^    enableSnapshotter: false$' roles/csi_driver_nfs/defaults/main.yml
         rg -q -U '^  externalSnapshotter:\n    enabled: false$' \
           roles/csi_driver_nfs/defaults/main.yml

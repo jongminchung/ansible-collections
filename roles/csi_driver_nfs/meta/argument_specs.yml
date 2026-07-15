@@ -22,6 +22,8 @@ argument_specs:
         type: list
         elements: str
         required: true
+        description:
+          - Must include nfsvers=3, hard, and nolock for controller-side NFSv3 mounts.
       csi_driver_nfs_reclaim_policy:
         type: str
         choices: [Delete]

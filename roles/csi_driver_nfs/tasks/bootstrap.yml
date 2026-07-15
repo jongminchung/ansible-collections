@@ -11,6 +11,9 @@
       - csi_driver_nfs_mount_options is iterable
       - csi_driver_nfs_mount_options is not string
       - csi_driver_nfs_mount_options | length > 0
+      - >-
+        ['nfsvers=3', 'hard', 'nolock']
+        | difference(csi_driver_nfs_mount_options) | length == 0
       - csi_driver_nfs_reclaim_policy == 'Delete'
       - csi_driver_nfs_on_delete == 'delete'
       - csi_driver_nfs_namespace | length > 0
