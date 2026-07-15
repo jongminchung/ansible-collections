@@ -51,6 +51,9 @@ tasks:
         test -f roles/csi_driver_nfs/tasks/smoke_test.yml
         rg -q '^  - nfsvers=3$' roles/csi_driver_nfs/defaults/main.yml
         rg -q '^  - nolock$' roles/csi_driver_nfs/defaults/main.yml
+        rg -q 'csi.storage.k8s.io/provisioner-secret-name' \
+          roles/csi_driver_nfs/defaults/main.yml
+        rg -q 'kind: Secret' roles/csi_driver_nfs/tasks/bootstrap.yml
         rg -q '^    enableSnapshotter: false$' roles/csi_driver_nfs/defaults/main.yml
         rg -q -U '^  externalSnapshotter:\n    enabled: false$' \
           roles/csi_driver_nfs/defaults/main.yml

@@ -41,6 +41,14 @@
       - csi_driver_nfs_storage_class.parameters.mountPermissions == csi_driver_nfs_mount_permissions
       - csi_driver_nfs_storage_class.parameters.onDelete == csi_driver_nfs_on_delete
       - >-
+        csi_driver_nfs_storage_class.parameters[
+          'csi.storage.k8s.io/provisioner-secret-name']
+        == csi_driver_nfs_mount_options_secret_name
+      - >-
+        csi_driver_nfs_storage_class.parameters[
+          'csi.storage.k8s.io/provisioner-secret-namespace']
+        == csi_driver_nfs_namespace
+      - >-
         csi_driver_nfs_storage_class.mountOptions | default([])
         | difference(csi_driver_nfs_mount_options) | length == 0
       - >-
@@ -63,6 +71,40 @@
   vars:
     csi_driver_nfs_storage_class:
       "{{ (dev_infra_deployment_resource_info_result.resources | first) | default({}, true) }}"
+  when: not ansible_check_mode
+
+- name: Read NFS CSI controller mount options Secret
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ dev_infra_deployment_control_node_kubeconfig_path }}"
+    api_version: v1
+    kind: Secret
+    namespace: "{{ csi_driver_nfs_namespace }}"
+    name: "{{ csi_driver_nfs_mount_options_secret_name }}"
+  register: csi_driver_nfs_mount_options_secret_info
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  changed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Verify NFS CSI controller mount options Secret
+  ansible.builtin.assert:
+    that:
+      - csi_driver_nfs_mount_options_secret_info.resources | length == 1
+      - >-
+        csi_driver_nfs_mount_options_secret.metadata.labels[
+          'app.kubernetes.io/managed-by'] | default('') == 'dev-infra-deployment'
+      - >-
+        csi_driver_nfs_mount_options_secret.metadata.labels[
+          'dev-infra.deployment/ownership'] | default('') == 'exclusive'
+      - >-
+        csi_driver_nfs_mount_options_secret.data.mountOptions | b64decode
+        == csi_driver_nfs_mount_options | join(',')
+    fail_msg: NFS CSI controller mount options Secret is missing or invalid.
+  vars:
+    csi_driver_nfs_mount_options_secret: >-
+      {{ (csi_driver_nfs_mount_options_secret_info.resources | first) | default({}, true) }}
+  no_log: true
   when: not ansible_check_mode
 
 - name: Read NFS CSIDriver

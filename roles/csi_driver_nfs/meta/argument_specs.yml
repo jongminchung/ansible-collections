@@ -35,6 +35,11 @@ argument_specs:
       csi_driver_nfs_default_class:
         type: bool
         required: true
+      csi_driver_nfs_mount_options_secret_name:
+        type: str
+        required: true
+        description:
+          - Secret used by DeleteVolume to mount the NFSv3 export with the required options.
   restart:
     short_description: Restart NFS CSI controller and node workloads.
     options: {}

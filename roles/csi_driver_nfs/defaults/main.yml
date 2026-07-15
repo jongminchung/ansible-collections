@@ -12,6 +12,7 @@ csi_driver_nfs_reclaim_policy: Delete
 csi_driver_nfs_on_delete: delete
 csi_driver_nfs_default_class: true
 csi_driver_nfs_namespace: nfs-csi
+csi_driver_nfs_mount_options_secret_name: csi-driver-nfs-mount-options
 csi_driver_nfs_release_name: csi-driver-nfs
 csi_driver_nfs_repo_name: csi-driver-nfs
 csi_driver_nfs_repo_url: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
@@ -56,6 +57,9 @@ csi_driver_nfs_helm_values:
       subDir: "{{ csi_driver_nfs_sub_dir }}"
       mountPermissions: "{{ csi_driver_nfs_mount_permissions }}"
       onDelete: "{{ csi_driver_nfs_on_delete }}"
+      csi.storage.k8s.io/provisioner-secret-name:
+        "{{ csi_driver_nfs_mount_options_secret_name }}"
+      csi.storage.k8s.io/provisioner-secret-namespace: "{{ csi_driver_nfs_namespace }}"
     reclaimPolicy: "{{ csi_driver_nfs_reclaim_policy }}"
     volumeBindingMode: Immediate
     mountOptions: "{{ csi_driver_nfs_mount_options }}"
